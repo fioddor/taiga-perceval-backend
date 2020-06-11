@@ -21,11 +21,9 @@
 # Usage..: Call from other python program.
 #
 # Design.: - Library with client class.
-#          - Reusable token =>
-#            - Method to retrieve it.
-#            - Argument to inject it.
-#            - Logic to identify input cases.
-#            - Refactor accordingly.
+#          - Reusable token.
+#          - __init__ refactored for readability: less nesting.
+#          - Failure reporting in login improved readability.
 #
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
 #
@@ -39,24 +37,25 @@ class TaigaMinClient():
     '''Minimalistic Taiga Client.'''
 
     H_CONTENT_TYPE = {'Content-Type': 'application/json'}
-    headers=None
+    token = None
+    headers = None
      
      
     def __init__(self, url=None, user=None, pswd=None, token=None):
-        if url:
-            self.base_url = url
-            if token:
-                self.token = token
-                self.__set_headers__()
-                print( 'Debug: TaigaMinClient.Init ' + self.token ) 
-            elif not user or not pswd:
-                raise Exception('Minimal arguments are missing: either token or user and pswd.')
-            else:
-                self.user = user
-                self.pswd = pswd
-                print( 'Debug: TaigaMinClient.Init ' + self.user + ':' + self.pswd +'@' + self.base_url )
-        else:
+        if not url:
             raise Exception('Minimal argument url (Taiga API base URL) is missing.')
+        self.base_url = url
+        
+        if token:
+            self.token = token
+            self.__set_headers__()
+            print( 'Debug: TaigaMinClient.Init ' + self.token ) 
+        elif not user or not pswd:
+            raise Exception('Minimal arguments are missing: either token or user and pswd.')
+        else:
+            self.user = user
+            self.pswd = pswd
+            print( 'Debug: TaigaMinClient.Init ' + self.user + ':' + self.pswd +'@' + self.base_url )
      
      
     def get_token(self):
@@ -84,10 +83,12 @@ class TaigaMinClient():
             self.token = rs0.json()['auth_token']
             self.__set_headers__()
         else:
-            print( 'Debug: TaigaMinClient.login failed:' )
-            print(rs0.request.body)
-            print(rs0.status_code)
-            print(rs0.text)
+            me = 'Debug: TaigaMinClient.login'
+            print( me + ' failed:'                                      )
+            print( me + ' Rq.headers : '     + str(rs0.request.headers) )
+            print( me + ' Rq.body : '        + str(rs0.request.body)    )
+            print( me + ' Rs.status_code : ' + str(rs0.status_code )    )
+            print( me + ' Rs.text:\n'        + rs0.text                 )
      
      
     def rq(self, branch):
