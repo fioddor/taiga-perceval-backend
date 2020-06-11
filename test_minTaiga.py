@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 Fioddor Superconcentrado
@@ -33,15 +34,8 @@
 #       - token caducado => 301?
 #       - token malo => 301?
 #     - rq headers:
-#       - paginación
 #       - tiempo de token 
-#     - rq paginadas/sin paginar
 #   - más comandos:
-#     - project/id
-#     - project/id/stats
-#     - backlog
-#     - kanban
-#     - wiki
 #   - httpretty (mocking) para probar offline.
 #   - #
 
@@ -189,10 +183,10 @@ class TestTaigaClient(unittest.TestCase):
 
     def test_pj_stats(self):
         '''Taiga Project Stats'''
-        
+          
         def td( var_name ):
             return self.TST_CFG.get( 'test-data' , var_name )
-
+         
         self.setup_taiga()
         tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
          
@@ -200,13 +194,73 @@ class TestTaigaClient(unittest.TestCase):
          
         field_names = [ 'total_milestones' , 'defined_points' , 'assigned_points' , 'closed_points' ]
         for field in field_names:
-             self.assertGreaterEqual( record[field] , float(td(  'proj_stats_min_'+field )) )
+             self.assertGreaterEqual( record[field] , float(td( 'proj_stats_min_'+field )) )
+     
+     
+    def test_pj_issues_stats(self):
+        '''Taiga Project Issues Stats'''
+         
+        def td( var_name ):
+            return self.TST_CFG.get( 'test-data' , var_name )
+         
+        self.setup_taiga()
+        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+         
+        record = tmc.proj_issues_stats( td( 'proj_issues_stats_id' ) )
+        field_names = [ 'total_issues' , 'opened_issues' , 'closed_issues' ]
+        for field in field_names:
+            self.assertGreaterEqual( record[field] , float(td( 'proj_issues_stats_min_'+field )) )
+         
+        group_names = [ 'priority' , 'severity' , 'status' ]
+        for group in group_names:
+            self.assertGreaterEqual( len(record['issues_per_'+group]) , float(td( 'proj_issues_stats_min_per_'+group )) )
+         
+         
+    def __test_pj_list__(self, list_name):
+        '''Standard test for Taiga Project List-property'''
+         
+        def td( var_name ):
+            return self.TST_CFG.get( 'test-data' , var_name )
+         
+        self.setup_taiga()
+        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+        
+        project_id = td( 'proj_{}_id'.format( list_name ) )
+        json_list = tmc.rq_pages( '{}?project={}'.format( list_name , project_id ) )
+        #print( response.headers )
+        #json_list = response.json()
+        item_count = len(json_list)
+        print( '{} {} items found.'.format( item_count , list_name ) )
+        # print( 'RS:'+str(json_list) )
+         
+        min_name = 'proj_{}_min'.format( list_name )
+        self.assertGreaterEqual( item_count , float(td( min_name )) )
+     
+     
+    def test_pj_epics(self):
+        '''Taiga Project Epics.'''
+        return self.__test_pj_list__( 'epics' )
+     
+     
+    def test_pj_userstories(self):
+        '''Taiga Project User Stories.'''
+        return self.__test_pj_list__( 'userstories' )
+     
+     
+    def test_pj_tasks(self):
+        '''Taiga Project Tasks.'''
+        return self.__test_pj_list__( 'tasks' )
+     
+     
+    def test_pj_wiki_pages(self):
+        '''Taiga Project Wiki Pages.'''
+        return self.__test_pj_list__( 'wiki' )
      
      
     def test_command(self):
         self.setup_taiga()
         tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
-        
+         
         response1 = tmc.rq('projects')
         if 200 != response1.status_code:
             self.fail( "Coudn't test projects/id/stats because the request for project list failed." )
@@ -214,19 +268,16 @@ class TestTaigaClient(unittest.TestCase):
         lst = response1.json()
         print( str(len(lst)) + ' projects found.' )
         for pj in lst:
-            command_under_test = 'projects/{}/stats'.format( pj['id'] )
+            command_under_test = 'wiki?project={}'.format( pj['id'] )
             response = tmc.rq(command_under_test)
              
             if 200==response.status_code:
                 rec = response.json()
-                aux = { "pjId":str(pj['id']) }
-                for datum in [ 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' ]:
-                    aux[datum] = rec[datum]
-                if ( rec['total_milestones'] or rec['total_points'  ] or
-                     0 < rec['closed_points'] or 0 < rec['defined_points'] or 0 < rec['assigned_points'] ):
-                    print( str(pj['id']) + ':' + str(aux) )
-                     
-                    self.assertTrue( True )
+                num = len(rec)
+                if 0 < num:
+                    print( str(pj['id']) + ' has ' + str(len(rec)) + ' wiki pages.' )
+                    # print(str(rec))
+        return
          
          
     def OFF_test_under_construction(self):
