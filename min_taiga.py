@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 Fioddor Superconcentrado
 #
@@ -15,9 +16,9 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #
-# Purpose: Minimalistic smoke test.
+# Purpose: First minimal client object plus a smoke test using it.
 #
-# Design.: + Script structure.
+# Design.: + Client class called from an embeded test case. 
 #          + Manual validation.
 #
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
@@ -27,30 +28,56 @@
 import sys , requests        
 
 
-
-H_CT   = {'Content-Type': 'application/json'}
 SERVER = 'https://api.taiga.io/api/v1/'
 
 
+class TaigaMinClient():
+    '''Minimalistic Taiga Client.'''
+
+    H_CT   = {'Content-Type': 'application/json'}
+    headers=None
+
+    def __init__(self, url=None, user=None, pswd=None):
+        if not url or not user or not pswd:
+            print('Faltan parámetros mínimos.')
+        else:
+            self.base_url = url
+            self.user     = user
+            self.pswd     = pswd
+            print( 'Debug: Init ' + self.user + ':' + self.pswd + '@' + self.base_url )
+     
+    def login(self):
+        '''Gets session token'''
+        
+        data_str = '{ ' + '"type": "normal", "username": "{}", "password": "{}"'.format( self.user , self.pswd ) + ' }'
+        data_ba  = bytearray(data_str, encoding='utf-8')
+
+        rs0 = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_CT )
+         
+        if 200==rs0.status_code:
+            self.headers = self.H_CT
+            self.headers['Authorization'] = 'Bearer ' + rs0.json()['auth_token']
+            print(self.headers)
+        else:
+            print(rs0.request.body)
+            print(rs0.status_code)
+            print(rs0.text)
+     
+    def rq(self, branch):
+        '''Most basic externally driven request handler.'''
+        if not self.headers:
+            self.login()
+        return requests.get( self.base_url+branch, headers=self.headers)
+
+
+
 if 3 != len(sys.argv):
-    print( 'Required 2 args: user and pass. {} arguments passed.'.format(len(sys.argv)-1) )
+    print( 'Required 2 args: user and pass. {} arguments passed. Aborting...'.format(len(sys.argv)-1) )
 else:
-    print( sys.argv[1] + ':' + sys.argv[2] )
-
-data_str = '{ ' + '"type": "normal", "username": "{}", "password": "{}"'.format( sys.argv[1] , sys.argv[2] ) + ' }'
-data_ba  = bytearray(data_str, encoding='utf-8')
-print(data_ba)
-
-
-rs0 = requests.post( SERVER+'auth',data=data_ba, headers=H_CT)
-
-if 200==rs0.status_code:
-    S_HEADERS = H_CT
-    S_HEADERS['Authorization'] = 'Bearer ' + rs0.json()['auth_token']
-    print(S_HEADERS)
-    
-    rs1 = requests.get( SERVER+'projects' , headers=S_HEADERS)
-
+    tmc = TaigaMinClient( SERVER , sys.argv[1] , sys.argv[2] )
+     
+    rs1 = tmc.rq('projects')
+     
     print('/--- Rq#1: /projects:')
     print(rs1.headers)
     print(rs1.request.body)
@@ -59,11 +86,5 @@ if 200==rs0.status_code:
     print('\n---')
     lst = rs1.json()
     print(len(lst))
-
     print('\\--- Rq#1.')
-
-else:
-    print(rs0.request.body)
-    print(rs0.status_code)
-    print(rs0.text)
 
