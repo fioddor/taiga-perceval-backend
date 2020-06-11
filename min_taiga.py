@@ -22,8 +22,10 @@
 #
 # Design.: - Library with client class.
 #          - Reusable token.
-#          - __init__ refactored for readability: less nesting.
-#          - Failure reporting in login improved readability.
+#          - Asynchronous =>
+#            - Close client sessions (pass them closed).
+#            - Signal server to close HTTP session.
+#            See https://stackoverflow.com/questions/10115126/python-requests-close-http-connection#15511852
 #
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
 #
@@ -36,7 +38,9 @@ import requests
 class TaigaMinClient():
     '''Minimalistic Taiga Client.'''
 
-    H_CONTENT_TYPE = {'Content-Type': 'application/json'}
+    H_STANDARD_BASE = { 'Content-Type': 'application/json'
+                      ,   'Connection': 'close'
+                      }
     token = None
     headers = None
      
@@ -66,7 +70,7 @@ class TaigaMinClient():
     def __set_headers__(self):
         '''(Re)sets session headers'''
          
-        self.headers = self.H_CONTENT_TYPE.copy()
+        self.headers = self.H_STANDARD_BASE.copy()
         self.headers['Authorization'] = 'Bearer ' + self.token
         print( 'Debug: TaigaMinClient.__set_headers__ as ' + str(self.headers) )
      
@@ -77,8 +81,9 @@ class TaigaMinClient():
         data_str = '{ ' + '"type": "normal", "username": "{}", "password": "{}"'.format( self.user , self.pswd ) + ' }'
         data_ba  = bytearray(data_str, encoding='utf-8')
          
-        rs0 = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_CONTENT_TYPE )
-         
+        rs0 = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_STANDARD_BASE )
+        rs0.close() 
+        
         if 200 == rs0.status_code:
             self.token = rs0.json()['auth_token']
             self.__set_headers__()
@@ -89,12 +94,14 @@ class TaigaMinClient():
             print( me + ' Rq.body : '        + str(rs0.request.body)    )
             print( me + ' Rs.status_code : ' + str(rs0.status_code )    )
             print( me + ' Rs.text:\n'        + rs0.text                 )
-     
-     
+         
+         
     def rq(self, branch):
         '''Most basic externally driven request handler.'''
         if not self.headers:
             self.login()
-        return requests.get( self.base_url+branch, headers=self.headers)
+        rs = requests.get( self.base_url+branch, headers=self.headers)
+        rs.close()
+        return rs
 
 
