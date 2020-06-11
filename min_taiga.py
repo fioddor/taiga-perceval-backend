@@ -16,52 +16,79 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #
-# Purpose: First minimal client object plus a smoke test using it.
+# Purpose: Minimal client in a library.
 #
-# Design.: + Client class called from an embeded test case. 
-#          + Manual validation.
+# Usage..: Call from other python program.
+#
+# Design.: - Library with client class.
+#          - Reusable token =>
+#            - Method to retrieve it.
+#            - Argument to inject it.
+#            - Logic to identify input cases.
+#            - Refactor accordingly.
 #
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
 #
 #-----------------------------------------------------------------------------------------------------------------------------------------
 
-import sys , requests        
+import requests        
 
-
-SERVER = 'https://api.taiga.io/api/v1/'
 
 
 class TaigaMinClient():
     '''Minimalistic Taiga Client.'''
 
-    H_CT   = {'Content-Type': 'application/json'}
+    H_CONTENT_TYPE = {'Content-Type': 'application/json'}
     headers=None
-
-    def __init__(self, url=None, user=None, pswd=None):
-        if not url or not user or not pswd:
-            print('Minimal parameters are missing.')
-        else:
+     
+     
+    def __init__(self, url=None, user=None, pswd=None, token=None):
+        if url:
             self.base_url = url
-            self.user     = user
-            self.pswd     = pswd
-            print( 'Debug: Init ' + self.user + ':' + self.pswd + '@' + self.base_url )
+            if token:
+                self.token = token
+                self.__set_headers__()
+                print( 'Debug: TaigaMinClient.Init ' + self.token ) 
+            elif not user or not pswd:
+                raise Exception('Minimal arguments are missing: either token or user and pswd.')
+            else:
+                self.user = user
+                self.pswd = pswd
+                print( 'Debug: TaigaMinClient.Init ' + self.user + ':' + self.pswd +'@' + self.base_url )
+        else:
+            raise Exception('Minimal argument url (Taiga API base URL) is missing.')
+     
+     
+    def get_token(self):
+        '''Returns session token for reuse.'''
+        return self.token
+     
+     
+    def __set_headers__(self):
+        '''(Re)sets session headers'''
+         
+        self.headers = self.H_CONTENT_TYPE.copy()
+        self.headers['Authorization'] = 'Bearer ' + self.token
+        print( 'Debug: TaigaMinClient.__set_headers__ as ' + str(self.headers) )
+     
      
     def login(self):
-        '''Gets session token'''
-        
+        '''Gets session token and (re)sets session headers accordingly'''
+         
         data_str = '{ ' + '"type": "normal", "username": "{}", "password": "{}"'.format( self.user , self.pswd ) + ' }'
         data_ba  = bytearray(data_str, encoding='utf-8')
-
-        rs0 = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_CT )
          
-        if 200==rs0.status_code:
-            self.headers = self.H_CT
-            self.headers['Authorization'] = 'Bearer ' + rs0.json()['auth_token']
-            print(self.headers)
+        rs0 = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_CONTENT_TYPE )
+         
+        if 200 == rs0.status_code:
+            self.token = rs0.json()['auth_token']
+            self.__set_headers__()
         else:
+            print( 'Debug: TaigaMinClient.login failed:' )
             print(rs0.request.body)
             print(rs0.status_code)
             print(rs0.text)
+     
      
     def rq(self, branch):
         '''Most basic externally driven request handler.'''
@@ -69,22 +96,4 @@ class TaigaMinClient():
             self.login()
         return requests.get( self.base_url+branch, headers=self.headers)
 
-
-
-if 3 != len(sys.argv):
-    print( 'Required 2 args: user and pass. {} arguments passed. Aborting...'.format(len(sys.argv)-1) )
-else:
-    tmc = TaigaMinClient( SERVER , sys.argv[1] , sys.argv[2] )
-     
-    rs1 = tmc.rq('projects')
-     
-    print('/--- Rq#1: /projects:')
-    print(rs1.headers)
-    print(rs1.request.body)
-    print(rs1.status_code)
-    print(rs1.text)
-    print('\n---')
-    lst = rs1.json()
-    print(len(lst))
-    print('\\--- Rq#1.')
 
