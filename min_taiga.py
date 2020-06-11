@@ -41,7 +41,8 @@ class TaigaMinClient():
     H_STANDARD_BASE = { 'Content-Type': 'application/json'
                       ,   'Connection': 'close'
                       }
-    token = None
+     
+    token   = None
     headers = None
      
      
@@ -94,8 +95,8 @@ class TaigaMinClient():
             print( me + ' Rq.body : '        + str(rs0.request.body)    )
             print( me + ' Rs.status_code : ' + str(rs0.status_code )    )
             print( me + ' Rs.text:\n'        + rs0.text                 )
-         
-         
+     
+     
     def rq(self, branch):
         '''Most basic externally driven request handler.'''
         if not self.headers:
@@ -103,5 +104,17 @@ class TaigaMinClient():
         rs = requests.get( self.base_url+branch, headers=self.headers)
         rs.close()
         return rs
-
+     
+     
+    def proj_stats(self, project):
+        '''Retrieve some basic stats from the given project.'''
+        response = self.rq( 'projects/{}/stats'.format(project) )
+        if 200==response.status_code:
+            record = response.json()
+            output = { "pjId":str(project) }
+            for datum in [ 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' ]:
+                output[datum] = record[datum]
+            return output
+        else:
+            raise Exception( "TaigaClient failure: You shoudn't have happened!" )
 
