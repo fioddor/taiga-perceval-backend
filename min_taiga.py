@@ -117,4 +117,17 @@ class TaigaMinClient():
             return output
         else:
             raise Exception( "TaigaClient failure: You shoudn't have happened!" )
+    
+    
+    def proj_issues_stats(self, project):
+        '''Retrieve some basic issues_stats from the given project.'''
+        response = self.rq( 'projects/{}/issues_stats'.format(project) )
+        if 200==response.status_code:
+            record = response.json()
+            output = { "pjId":str(project) }
+            for datum in [ 'total_issues' , 'opened_issues' , 'closed_issues' , 'issues_per_priority' , 'issues_per_severity' , 'issues_per_status' ]:
+                output[datum] = record[datum]
+            return output
+        else:
+            raise Exception( "TaigaClient failure: You shoudn't have happened!" )
 
