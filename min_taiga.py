@@ -39,7 +39,7 @@ class TaigaMinClient():
 
     def __init__(self, url=None, user=None, pswd=None):
         if not url or not user or not pswd:
-            print('Faltan parámetros mínimos.')
+            print('Minimal parameters are missing.')
         else:
             self.base_url = url
             self.user     = user
