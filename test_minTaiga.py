@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 Fioddor Superconcentrado
@@ -18,25 +19,22 @@
 #
 # Purpose: Automatic unit tests for TaigaMinClient.
 #
-# Design.: - unittest as framework.
+# Design.: - Unittest as framework.
 #          - API credentials read from a config file.
-#          - More and better tests.
+#          - Setup creates a default client. 
+#          - More and better tests:
+#            - Some tests reuse the new default client.
 #          - Better verbosity.
 #
 # Authors:
 #     Igor Zubiaurre <fioddor@gmail.com>
 #
 # Pending:
-#   - situar en estructura de carpetas/módulos
-#   - más TCs:
-#     - rq
-#       - token caducado => 301?
-#       - token malo => 301?
-#     - rq headers:
-#       - tiempo de token 
-#   - más comandos:
-#   - httpretty (mocking) para probar offline.
-#   - #
+#   - Integrate into perceval structure.
+#   - More TCs:
+#     - Expired token => HTTP 301?
+#   - httpretty (mocking) for offline testing.
+#
 
 
 import configparser , unittest
@@ -49,13 +47,15 @@ CFG_FILE = 'test_minTaiga.cfg'
 
 class TestTaigaClient(unittest.TestCase):
     """Taiga API client tests"""
-
+    
+    # Configured test data to be passed from common setup to testcases:
     API_URL = None
     API_USR = None
     API_PWD = None
     API_TKN = None    
      
-    TST_CFG = None
+    TST_CFG = None   # Configured test data.
+    TST_DTC = None   # Default Taiga Client for testing.
      
      
     def setup_taiga(self):
@@ -63,6 +63,14 @@ class TestTaigaClient(unittest.TestCase):
          
         #sloppy testing fix:
         print('\n')  # after testCase name and description.
+        
+        # clean up common test data:
+        self.API_URL = None
+        self.API_USR = None
+        self.API_PWD = None
+        self.API_TKN = None
+        self.TST_CFG = None
+        self.TST_DTC = None
          
         # read config file:
         cfg = configparser.RawConfigParser()
@@ -74,31 +82,33 @@ class TestTaigaClient(unittest.TestCase):
         # take credentials (2 options):
         tag = 'taiga-default-credentials'
          
-        has_usr_pwd = True
         try:
             self.API_USR = cfg.get( tag , 'User'     )
             self.API_PWD = cfg.get( tag , 'Password' )
-            print( 'Debug: TestTaigaMinClient.setup_taiga has read user {}, pswd {}.'.format( self.API_USR , self.API_PWD ) )
+            has_usr_pwd = True
+            # print( 'Debug: TestTaigaMinClient.setup_taiga has read user {}, pswd {}.'.format( self.API_USR , self.API_PWD ) )
         except KeyError(key):
             has_usr_pwd = False
          
-        has_token = True
         try:
             self.API_TKN = cfg.get( tag , 'Token' )
-            print( 'Debug: TestTaigaMinClient.setup_taiga has read token {}.'.format( self.API_TKN ) )
+            has_token = True
+            # print( 'Debug: TestTaigaMinClient.setup_taiga has read token {}.'.format( self.API_TKN ) )
         except KeyError(key):
             has_token = False
          
         if not (has_usr_pwd or hastoken):
-            raise Expception('TestTaigaMinClient.setup_taiga FAILED due to test data missing: credentials missing in test config file.')
+            raise Exception('TestTaigaMinClient.setup_taiga FAILED due to test data missing: credentials missing in test config file.')
          
         # load other test data:
         self.TST_CFG = cfg
+        if has_token:
+            self.TST_DTC = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
          
          
     def test_init_without_expected_arguments_causes_exception(self):
         '''Raises Exception if client is requested without expected arguments.
-        
+         
         Either:
         a) url and token.
         b) url, user and pswd.
@@ -110,24 +120,23 @@ class TestTaigaClient(unittest.TestCase):
         self.assertRaises( Exception , TaigaMinClient )
          
         # Only (valid) URL (missing either token or both, user and pswd):
-        with self.assertRaises( Exception ):
+        with self.assertRaises( Exception , msg='A TiagaClient init missing token or user or pswd should have raised an Exception.'):
             tmc = TaigaMinClient( url=self.API_URL ) 
          
         # Missing URL with user and pswd:
-        with self.assertRaises( Exception ):
+        with self.assertRaises( Exception , msg='A TaigaClient init missing the url should have raised an Exception.'):
             tmc = TaigaMinClient( user=self.API_USR , pswd=self.API_PWD )
 
         # Missing URL with a (random) token:
-        # (Tokens expire, we cannot staticly use a valid one)
-        with self.assertRaises( Exception ):
+        with self.assertRaises( Exception , msg='A TaigaClient init missing the url should have raised an Exception.'):
             tmc = TaigaMinClient( token='some_clumsy_token' )
          
         # Missing user:
-        with self.assertRaises( Exception ):
+        with self.assertRaises( Exception , msg='A TaigaClient init missing the user should have raised an Exception'):
             tmc = TaigaMinClient( url=self.API_URL , pswd=self.API_PWD )
          
         # Missing pswd:
-        with self.assertRaises( Exception ):
+        with self.assertRaises( Exception , msg='A TaigaClient init missing the pswd should have raised an Exception.'):
             tmc = TaigaMinClient( url=self.API_URL , user=self.API_USR )
      
      
@@ -150,48 +159,55 @@ class TestTaigaClient(unittest.TestCase):
          
          
     def test_initialization(self):
-        '''Test initialization for Taiga testing.'''
+        '''Test Taiga Client initializations.'''
          
         SAFE_API_COMMAND = 'projects'
         self.setup_taiga()
          
-        # real init(implicit url, user, pswd) executes (no exception): 
+        # user&pswd init(implicit url, user, pswd) executes (no exception): 
         tmc = TaigaMinClient( self.API_URL , self.API_USR , self.API_PWD )
          
-        # a fresh real init sets no token:
+        # a fresh user&pswd init sets no token:
         self.assertEqual( None , tmc.get_token() )
          
-        # ... and raises exception is executed before login():
-        # ... and executes request (no exception) after login:
+        # ... thus, it raises exception if executed before login():
+        with self.assertRaises( Exception ):
+            tmc.rq(SAFE_API_COMMAND)
+         
+        # ... but after login it executes a request (no exception):
         tmc.login()
         rs1 = tmc.rq(SAFE_API_COMMAND)
          
         self.assertEqual( 200 , rs1.status_code )
-
+        
+        # API returns max 30 items per page: (get limit from response header?)
         lst = rs1.json()
         self.assertEqual( 30 , len(lst) )
          
         # ... now it has a (non-None) token:
-        self.API_TKN = tmc.get_token()
-        self.assertFalse( None == self.API_TKN ) 
+        fresh_token = tmc.get_token()
+        self.assertFalse( None == fresh_token )
+        # ... a brand new one:
+        self.assertNotEqual( self.API_TKN , fresh_token )
          
-         
-        # a hybrid re-init (positional url, explicit token) executes (no exception):
+        # a token re-init (url, explicit token) executes (no exception):
         tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+        # its token has changed as requested in the init command:
+        self.assertEqual( self.API_TKN , tmc.get_token() )
         # and executes (the same valid) request (no exception):
         rs2 = tmc.rq(SAFE_API_COMMAND)
         self.assertEqual( 200 , rs2.status_code )
-
-
+         
+         
     def test_wrong_token(self):
         '''Taiga rejects wrong tokens.'''
         SAFE_API_COMMAND = 'projects'
         EXPECTED_RS_JSON = {"_error_message": "Invalid token", "_error_type": "taiga.base.exceptions.NotAuthenticated"} 
         self.setup_taiga()
-
+         
         tmc = TaigaMinClient( url=self.API_URL , token='wrong_token' )
         response = tmc.rq( SAFE_API_COMMAND )
-
+         
         self.assertEqual( 401 , response.status_code )
         self.assertDictEqual( EXPECTED_RS_JSON , response.json() )
          
@@ -203,9 +219,8 @@ class TestTaigaClient(unittest.TestCase):
             return self.TST_CFG.get( 'test-data' , var_name )
          
         self.setup_taiga()
-        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
          
-        record = tmc.proj_stats( td( 'proj_stats_id' ) )
+        record = self.TST_DTC.proj_stats( td( 'proj_stats_id' ) )
          
         field_names = [ 'total_milestones' , 'defined_points' , 'assigned_points' , 'closed_points' ]
         for field in field_names:
@@ -219,9 +234,8 @@ class TestTaigaClient(unittest.TestCase):
             return self.TST_CFG.get( 'test-data' , var_name )
          
         self.setup_taiga()
-        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
          
-        record = tmc.proj_issues_stats( td( 'proj_issues_stats_id' ) )
+        record = self.TST_DTC.proj_issues_stats( td( 'proj_issues_stats_id' ) )
         field_names = [ 'total_issues' , 'opened_issues' , 'closed_issues' ]
         for field in field_names:
             self.assertGreaterEqual( record[field] , float(td( 'proj_issues_stats_min_'+field )) )
@@ -238,10 +252,9 @@ class TestTaigaClient(unittest.TestCase):
             return self.TST_CFG.get( 'test-data' , var_name )
          
         self.setup_taiga()
-        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
-        
+         
         project_id = td( 'proj_{}_id'.format( list_name ) )
-        json_list = tmc.rq_pages( '{}?project={}'.format( list_name , project_id ) )
+        json_list = self.TST_DTC.rq_pages( '{}?project={}'.format( list_name , project_id ) )
         #print( response.headers )
         #json_list = response.json()
         item_count = len(json_list)
@@ -272,16 +285,47 @@ class TestTaigaClient(unittest.TestCase):
         return self.__test_pj_list__( 'wiki' )
      
      
-    def test_command(self):
+    def OFF_test_proj_export(self):
+
+        '''Taiga export doesn't work due to permissions.'''
+         
         self.setup_taiga()
         tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
          
-        response1 = tmc.rq('projects')
+        response = tmc.rq('exporter/156665')
+         
+        if 403 != response.status_code:
+            print(response.json)
+        self.assertEqual( 403 , response.status_code )
+        self.assertEqual( 'You do not have permission to perform this action.' , response.json()['_error_message'] )
+         
+          
+    def test_proj(self):
+        '''Taiga Project data.'''
+        self.setup_taiga()
+        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+        
+        data = tmc.proj(156665)
+        print( str(len(data)) + ' project data items.' )
+        print( len(str(data)) + ' bytes of size.'      )
+        self.assertTrue(True)
+     
+     
+    def OFF_test_command(self):
+        self.setup_taiga()
+        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+         
+        response1 = tmc.rq('projects?is_backlog_activated=true&is_kanban_activated=true')
         if 200 != response1.status_code:
+            print( response1.headers )
+            print( response1 )
             self.fail( "Coudn't test projects/id/stats because the request for project list failed." )
             return
         lst = response1.json()
         print( str(len(lst)) + ' projects found.' )
+        print( response1.headers )
+        print( lst )
+        return
         for pj in lst:
             command_under_test = 'wiki?project={}'.format( pj['id'] )
             response = tmc.rq(command_under_test)
@@ -294,7 +338,7 @@ class TestTaigaClient(unittest.TestCase):
                     # print(str(rec))
         return
          
-         
+    
     def OFF_test_under_construction(self):
         '''This test is under construction.'''
          
