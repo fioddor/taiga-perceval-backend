@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 Fioddor Superconcentrado
@@ -63,9 +62,12 @@ class TestTaigaClient(unittest.TestCase):
     API_PWD = None
     API_TKN = None    
      
+    TST_CFG = None
+     
      
     def setup_taiga(self):
-
+        '''Set up Taiga service'''
+         
         #sloppy testing fix:
         print('\n')  # after testCase name and description.
          
@@ -96,6 +98,9 @@ class TestTaigaClient(unittest.TestCase):
          
         if not (has_usr_pwd or hastoken):
             raise Expception('TestTaigaMinClient.setup_taiga FAILED due to test data missing: credentials missing in test config file.')
+         
+        # load other test data:
+        self.TST_CFG = cfg
          
          
     def test_init_without_expected_arguments_causes_exception(self):
@@ -180,8 +185,50 @@ class TestTaigaClient(unittest.TestCase):
         # and executes (the same valid) request (no exception):
         rs2 = tmc.rq(SAFE_API_COMMAND)
         self.assertEquals( 200 , rs2.status_code )
-         
+
+
+    def test_pj_stats(self):
+        '''Taiga Project Stats'''
         
+        def td( var_name ):
+            return self.TST_CFG.get( 'test-data' , var_name )
+
+        self.setup_taiga()
+        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+         
+        record = tmc.proj_stats( td( 'proj_stats_id' ) )
+         
+        field_names = [ 'total_milestones' , 'defined_points' , 'assigned_points' , 'closed_points' ]
+        for field in field_names:
+             self.assertGreaterEqual( record[field] , float(td(  'proj_stats_min_'+field )) )
+     
+     
+    def test_command(self):
+        self.setup_taiga()
+        tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
+        
+        response1 = tmc.rq('projects')
+        if 200 != response1.status_code:
+            self.fail( "Coudn't test projects/id/stats because the request for project list failed." )
+            return
+        lst = response1.json()
+        print( str(len(lst)) + ' projects found.' )
+        for pj in lst:
+            command_under_test = 'projects/{}/stats'.format( pj['id'] )
+            response = tmc.rq(command_under_test)
+             
+            if 200==response.status_code:
+                rec = response.json()
+                aux = { "pjId":str(pj['id']) }
+                for datum in [ 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' ]:
+                    aux[datum] = rec[datum]
+                if ( rec['total_milestones'] or rec['total_points'  ] or
+                     0 < rec['closed_points'] or 0 < rec['defined_points'] or 0 < rec['assigned_points'] ):
+                    print( str(pj['id']) + ':' + str(aux) )
+                     
+                    self.assertTrue( True )
+         
+         
     def OFF_test_under_construction(self):
         '''This test is under construction.'''
          
