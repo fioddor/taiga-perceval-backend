@@ -52,7 +52,7 @@ import configparser , unittest
 from min_taiga import TaigaMinClient
 
 
-CFG_FILE = 'taiga_site.cfg'
+CFG_FILE = 'test_min_taiga.cfg'
 
 
 class TestTaigaClient(unittest.TestCase):
