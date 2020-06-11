@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 Fioddor Superconcentrado
@@ -139,20 +138,20 @@ class TestTaigaClient(unittest.TestCase):
          
         tmc = TaigaMinClient( url=self.API_URL , token=a_token )
          
-        self.assertEquals( tmc.get_token() , a_token )
+        self.assertEqual( tmc.get_token() , a_token )
          
          
-    def test_init_with_usr_and_pswd(self):
+    def test_init_with_user_and_pswd(self):
         '''A client is created without token.'''
         self.setup_taiga()
          
         tmc = TaigaMinClient( url=self.API_URL , user=self.API_USR , pswd=self.API_PWD )
-        self.assertEquals( None , tmc.get_token() )
+        self.assertEqual( None , tmc.get_token() )
          
          
     def test_initialization(self):
         '''Test initialization for Taiga testing.'''
-        
+         
         SAFE_API_COMMAND = 'projects'
         self.setup_taiga()
          
@@ -162,13 +161,16 @@ class TestTaigaClient(unittest.TestCase):
         # a fresh real init sets no token:
         self.assertEqual( None , tmc.get_token() )
          
-        # ... and executes request (no exception):
+        # ... and raises exception is executed before login():
+        # ... and executes request (no exception) after login:
+        tmc.login()
         rs1 = tmc.rq(SAFE_API_COMMAND)
+         
+        self.assertEqual( 200 , rs1.status_code )
 
-        self.assertEquals( 200 , rs1.status_code )
         lst = rs1.json()
-        self.assertEquals( 30 , len(lst) )
-
+        self.assertEqual( 30 , len(lst) )
+         
         # ... now it has a (non-None) token:
         self.API_TKN = tmc.get_token()
         self.assertFalse( None == self.API_TKN ) 
@@ -178,9 +180,22 @@ class TestTaigaClient(unittest.TestCase):
         tmc = TaigaMinClient( url=self.API_URL , token=self.API_TKN )
         # and executes (the same valid) request (no exception):
         rs2 = tmc.rq(SAFE_API_COMMAND)
-        self.assertEquals( 200 , rs2.status_code )
+        self.assertEqual( 200 , rs2.status_code )
 
 
+    def test_wrong_token(self):
+        '''Taiga rejects wrong tokens.'''
+        SAFE_API_COMMAND = 'projects'
+        EXPECTED_RS_JSON = {"_error_message": "Invalid token", "_error_type": "taiga.base.exceptions.NotAuthenticated"} 
+        self.setup_taiga()
+
+        tmc = TaigaMinClient( url=self.API_URL , token='wrong_token' )
+        response = tmc.rq( SAFE_API_COMMAND )
+
+        self.assertEqual( 401 , response.status_code )
+        self.assertDictEqual( EXPECTED_RS_JSON , response.json() )
+         
+         
     def test_pj_stats(self):
         '''Taiga Project Stats'''
           
