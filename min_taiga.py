@@ -17,32 +17,38 @@
 #
 #
 # Purpose: Minimal client in a library.
-#
-# Usage..: 1. Instantiate object from other python program with either
-#             a) API token or
-#             b) user and password
-#          2. Only if you instantiated with user and password you need to (call) login.
-#
-# Design.: - Library with client class.
-#          - Reusable user token.
-#          - Asynchronous =>
-#            - Close client sessions (pass them closed).
-#            - Signal server to close HTTP session.
-#            See https://stackoverflow.com/questions/10115126/python-requests-close-http-connection#15511852
-#          - Paginates to completion or to requested maximum.
-#
+# Usage..: Instantiate object from other python program.
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
 #
-#-----------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------
 
 import requests
 from math import ceil
 
+import logging
+logging.basicConfig( level=logging.INFO ) #DEBUG )
+logger = logging.getLogger(__name__)
+
 
 
 class TaigaMinClient():
-    '''Minimalistic Taiga Client.'''
-
+    '''Minimalistic Taiga Client.
+     
+    Usage..: 1. Instantiate object from other python program with either
+                a) API token or
+                b) user and password
+             2. Only if you instantiated with user and password (b) you need to (call) login.
+     
+    Design.: - Asynchronous =>
+               - Close client sessions (pass them closed).
+               - Signal server to close HTTP session.
+                 See https://stackoverflow.com/questions/10115126/python-requests-close-http-connection#15511852
+     
+    Pending: - We don't yet see a compelling reason to implement application-token authentication.
+             - In our reference Taiga instance (taiga.io) project export needs special permissions we don't have.
+    '''
+    
+    ME = 'TaigaMinClient'
     H_STANDARD_BASE = { 'Content-Type': 'application/json'
                       ,   'Connection': 'close'
                       }
@@ -52,20 +58,22 @@ class TaigaMinClient():
      
      
     def __init__(self, url=None, user=None, pswd=None, token=None):
+        ME = self.ME + '.__init__'
+
         if not url:
-            raise Exception('Minimal argument url (Taiga API base URL) is missing.')
+            raise Exception(ME+'Minimal argument url (Taiga API base URL) is missing.')
         self.base_url = url
         
         if token:
             self.token = token
             self.__set_headers__()
-            print( 'Debug: TaigaMinClient.Init ' + self.token ) 
+            logger.debug( ME+'( ' + self.token + ' ).' ) 
         elif not user or not pswd:
-            raise Exception('Minimal arguments are missing: either token or user and pswd.')
+            raise Exception(ME+'Minimal arguments are missing: either token or user and pswd.')
         else:
             self.user = user
             self.pswd = pswd
-            print( 'Debug: TaigaMinClient.Init ' + self.user + ':' + self.pswd +'@' + self.base_url )
+            logger.debug( ME + ' ' + self.user + ':' + self.pswd +'@' + self.base_url )
      
      
     def get_token(self):
@@ -78,7 +86,8 @@ class TaigaMinClient():
          
         self.headers = self.H_STANDARD_BASE.copy()
         self.headers['Authorization'] = 'Bearer ' + self.token
-        print( 'Debug: TaigaMinClient.__set_headers__ as ' + str(self.headers) )
+        
+        logger.debug( self.ME+'.set_headers as ' + str(self.headers) )
      
      
     def login(self):
@@ -94,17 +103,17 @@ class TaigaMinClient():
             self.token = rs0.json()['auth_token']
             self.__set_headers__()
         else:
-            me = 'Debug: TaigaMinClient.login'
-            print( me + ' failed:'                                      )
-            print( me + ' Rq.headers : '     + str(rs0.request.headers) )
-            print( me + ' Rq.body : '        + str(rs0.request.body)    )
-            print( me + ' Rs.status_code : ' + str(rs0.status_code )    )
-            print( me + ' Rs.text:\n'        + rs0.text                 )
+            ME = self.ME + '.login'
+            logger.error( ME + ' failed:'                                      )
+            logger.error( ME + ' Rq.headers : '     + str(rs0.request.headers) )
+            logger.error( ME + ' Rq.body : '        + str(rs0.request.body)    )
+            logger.error( ME + ' Rs.status_code : ' + str(rs0.status_code )    )
+            logger.error( ME + ' Rs.text:\n'        + rs0.text                 )
      
      
     def rq(self, branch):
         '''Most basic externally driven request handler.
-        
+         
         :returns: a closed requests response. The full object is returned
                   (whether successful or not) for further analysis. Only
                   raises an exception if the client is not initiated.
@@ -129,11 +138,11 @@ class TaigaMinClient():
          
         response = requests.get( self.base_url+branch, headers=self.headers )
         if 200 != response.status_code:
-            raise Exception ( 'Http return code {} retrieving {}.'.format(response_status_code , self.base_url+branch) )
+            raise Exception ( 'Http return code {} retrieving {}.'.format(response.status_code , self.base_url+branch) )
         else:
             output = response.json()
              
-            if response.headers['x-paginated']:
+            if all(key in response.headers for key in ( 'x-paginated' , 'x-pagination-count' , 'x-paginated-by' )):
                 max_taiga = ceil( int(response.headers['x-pagination-count'])
                                 / int(response.headers['x-paginated-by'])
                                 )
@@ -146,12 +155,12 @@ class TaigaMinClient():
                     next_url = response.headers['X-Pagination-Next']
                     response = requests.get( next_url , headers=self.headers )
                     if 200 != response.status_code:
-                        print( response.headers )
+                        logger.error( response.headers )
                         raise Exception( 'Http return code {} retrieving {}.'.format(response.status_code , next_url) )
                     else:
                         # print( response.headers )
                         output.extend( response.json() )
-                        print( 'Debug.TaigaMinClient.rp_pages got yet {} items out of {}.'.
+                        logger.info( self.ME+'.rp_pages got yet {} items out of {}.'.
                                format( len(output) , response.headers['x-pagination-count'] )
                              )
              
@@ -159,29 +168,65 @@ class TaigaMinClient():
             return output
      
      
-    def proj_stats(self, project):
-        '''Retrieve some basic stats from the given project.'''
-        response = self.rq( 'projects/{}/stats'.format(project) )
-        if 200==response.status_code:
+    def get_lst_data_from_singlepage(self, branch, key_list):
+        '''Cherry-picks a given list of items from a single page endpoint.
+        
+        :param: key_list: a list of the JSON keys of all items to retrieve.
+        :returns: a dictionary with all retrieved items. It raises Exceptions
+            if any item is missing or the API responds unexpectedly. 
+        '''
+        response = self.rq( branch )
+        if 200 == response.status_code:
+            output = {}
             record = response.json()
-            output = { "pjId":str(project) }
-            for datum in [ 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' ]:
-                output[datum] = record[datum]
+            for datum in key_list:
+                if datum in record:
+                    output[datum] = record[datum]
+                else:
+                    raise Exception( 'Missing data {} in {}'.format(datum , branch) )
             return output
         else:
-            raise Exception( "TaigaClient failure: This shoudn't have happened!" )
+            FAILURE_MESSAGE = 'TaigaClient.get_lst_data_from_singlepage({}) got an HTTP code {} in response:\n{}'
+            raise Exception( FAILURE_MESSAGE.format(branch, response.status_code , response.text) )
+     
+     
+    def proj_stats(self, project):
+        '''Retrieve some basic stats from the given project.'''
+         
+        STATISTICS = ( 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' )
+        api_command = 'projects/{}/stats'.format( project )
+         
+        return self.get_lst_data_from_singlepage( api_command , STATISTICS )
      
      
     def proj_issues_stats(self, project):
         '''Retrieve some basic issues_stats from the given project.'''
-        response = self.rq( 'projects/{}/issues_stats'.format(project) )
-        if 200==response.status_code:
-            record = response.json()
-            output = { "pjId":str(project) }
-            for datum in [ 'total_issues' , 'opened_issues' , 'closed_issues' , 'issues_per_priority' , 'issues_per_severity' , 'issues_per_status' ]:
-                output[datum] = record[datum]
-            return output
-        else:
-            raise Exception( "TaigaClient failure: This shoudn't have happened!" )
+         
+        STATISTICS = ( 'total_issues' , 'opened_issues' , 'closed_issues'
+                     , 'issues_per_priority' , 'issues_per_severity' , 'issues_per_status'
+                     )
+        api_command = 'projects/{}/issues_stats'.format( project )
+         
+        return self.get_lst_data_from_singlepage( api_command , STATISTICS )
+     
+     
+    def proj(self, project):
+        '''Retrieve all information about the given project.
+        
+        Since we're not allowed to export a project we request the data by parts.
+        '''
+        blocks = [ (       'basics' , 'projects/{}'              )
+                 , (        'stats' , 'projects/{}/stats'        )
+                 , ( 'issues_stats' , 'projects/{}/issues_stats' )
+                 , (        'epics' ,       'epics?project={}'   )
+                 , (  'userstories' , 'userstories?project={}'   )
+                 , (        'tasks' ,       'tasks?project={}'   )
+                 , (         'wiki' ,        'wiki?project={}'   )
+                 ]
+        project_info = {}
+        for name , url in blocks:
+            project_info[name] = self.rq_pages( url.format( project ) )
+        
+        return project_info
 
 
