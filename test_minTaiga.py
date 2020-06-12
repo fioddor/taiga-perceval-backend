@@ -300,8 +300,34 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         cls.API_URL = 'https://a.taiga.instance/API/V9/'
         cls.API_TKN = 'a_clumsy_token'
-        # Default Taiga Client for testing.
+        # Default Taiga Client for testing:
         cls.TST_DTC = TaigaClient( url=cls.API_URL , token=cls.API_TKN )
+    
+    
+    def http_code_nr(self, name ):
+        '''Returns an HTTP code by name.
+        
+        This is a hub function to minimize fan-out.
+        '''
+        return Utilities.http_code_nr( name )   
+    
+    
+    def mock_pages(self, identifier , endpoint , max_page ):
+        '''Mocks paged responses.
+        
+        The page urls to mock are mapped with the endpoint. The stored responses are retrieved by identifier.
+        This is a hub function to minimize fan-out. Url mapping and retrieval logic are resolved by the
+            called function.
+        :param: identifier: a text identier of the endpoint for retrieving the stored mock responses.
+        :param: endpoint: endpoint to mock.
+        :param: max_pages: number of first consecutive pages to mock for the (same) endpoint.
+        '''
+        Utilities.mock_pages( identifier , endpoint , max_page )
+    
+    
+    def setUp(self):
+        '''Sloppy screen fix.'''
+        print()
     
     
     def test_init_without_expected_arguments_causes_exception(self):
@@ -311,7 +337,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         a) url and token.
         b) url, user and pswd.
         '''
-         
+        
         API_USR = 'a_user'
         API_PWD = 'a_pswd'
         
@@ -345,7 +371,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         # ...has its token:
         self.assertEqual( self.TST_DTC.get_token() , self.API_TKN )
         
-        # ...is born already logged and thus shouldn't login: ")
+        # ...is born already logged and thus shouldn't login: "
         with self.assertRaises( Login_Lacks_Credentials ):
             bah = self.TST_DTC.login()
     
@@ -361,36 +387,41 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         self.assertEqual( None , tmc.get_token() )
         
         # without token nothing works:
+        DUMMY_URL = 'should NOT even try'
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.basic_rq(         'should NOT even try')
+            bah = tmc.basic_rq(         DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.rq(               'should NOT even try')
+            bah = tmc.rq(               DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.proj_stats(       'should NOT even try')
+            bah = tmc.proj_stats(       DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.proj_issues_stats('should NOT even try')     
+            bah = tmc.proj_issues_stats(DUMMY_URL)     
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.proj(             'should NOT even try')
+            bah = tmc.proj(             DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.get_lst_data_from_api( 'should NOT even try', [] )
+            bah = tmc.get_lst_data_from_api( DUMMY_URL , [] )
     
     
     @mock.activate
     def test_initialization(self):
         '''Taiga Client initializations.'''
          
+        HTTP_OK = self.http_code_nr( 'OK' ) 
+        
         SAFE_API_COMMAND = 'projects'
         mock.register_uri( mock.GET
                          , self.API_URL + SAFE_API_COMMAND
                          , body=read_file('data/taiga/projects.body.RS')
-                         , status=200
+                         , status=HTTP_OK
                          )
         mock.register_uri( mock.POST
                          , self.API_URL + 'auth'
                          , body='{ "auth_token":"a_token" }'
-                         , status=200
+                         , status=HTTP_OK
                          )
-
+        TST_ITEMS_PER_PAGE = 30
+        
+        
         # user&pswd init(implicit url, user, pswd) executes (no exception): 
         tmc = TaigaClient( self.API_URL , 'a_user' , 'a_password' )
          
@@ -405,11 +436,11 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         tmc.login()
         rs1 = tmc.basic_rq(SAFE_API_COMMAND)
          
-        self.assertEqual( 200 , rs1.status_code )
+        self.assertEqual( HTTP_OK , rs1.status_code )
         
         # API returns max 30 items per page: (get limit from response header?)
         lst = rs1.json()
-        self.assertEqual( 30 , len(lst) )
+        self.assertEqual( TST_ITEMS_PER_PAGE , len(lst) )
          
         # ... now it has a (non-None) token:
         fresh_token = tmc.get_token()
@@ -423,7 +454,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         self.assertEqual( self.API_TKN , tmc.get_token() )
         # and executes (the same valid) request (no exception):
         rs2 = tmc.basic_rq(SAFE_API_COMMAND)
-        self.assertEqual( 200 , rs2.status_code )
+        self.assertEqual( HTTP_OK , rs2.status_code )
     
     
     @mock.activate
@@ -432,7 +463,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         mock.register_uri( mock.POST
                          , self.API_URL + 'auth'
-                         , status=403
+                         , status=self.http_code_nr( 'UNAUTHORIZED' )
                          , body='''{ "etc":"etc" }'''
                          )
         
@@ -445,16 +476,17 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     def test_no_permission(self):
         '''Taiga denies permission.'''
          
+        HTTP_PERMISSION_DENIED = self.http_code_nr( 'Forbidden' )
         def mock_url( query ):
             mock.register_uri( mock.GET
                              , self.API_URL + query
-                             , status=403
+                             , status=HTTP_PERMISSION_DENIED
                              , body='''{            "etc":"etc"
                                        , "_error_message":"You do not have permission to perform this action."
                                        }
                                     '''
                              )
-            print(query)
+            #print(query)
         
         for u in [ 'deny' , 'projects/id' , 'projects/id/stats', 'projects/id/issues_stats' ]:
             mock_url( u )
@@ -462,7 +494,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         # AC1: basic_rq() raises no exception:
         response = tc.basic_rq( 'deny' )
-        response.status_code=403
+        response.status_code=HTTP_PERMISSION_DENIED
         
         # AC1: everything else is paginated and rq() raises Unexpected_HTTPcode:
         with self.assertRaises( Unexpected_HTTPcode ):
@@ -480,11 +512,12 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     @mock.activate
     def test_wrong_token(self):
         '''Taiga rejects wrong token.'''
-         
+        
+        HTTP_UNAUTHORIZED = self.http_code_nr( 'Unauthorized' )
         def mock_url( query ):
             mock.register_uri( mock.GET
                              , self.API_URL + query
-                             , status=401
+                             , status=HTTP_UNAUTHORIZED
                              , body='''{            "etc":"etc"
                                        , "_error_message": "Invalid token"
                                        , "_error_type"   : "taiga.base.exceptions.NotAuthenticated"
@@ -497,8 +530,8 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         tc = self.TST_DTC
         
         response = tc.basic_rq( 'deny' )              # rq raises no exception
-        response.status_code=401
-         
+        response.status_code=HTTP_UNAUTHORIZED
+        
         with self.assertRaises( Unexpected_HTTPcode ):
             bah = tc.rq( 'deny' )
         with self.assertRaises( Unexpected_HTTPcode ):
@@ -515,30 +548,32 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     def test_rq_max(self):
         '''Rq stops paginating on user limit.'''
         
-        TST_QUERY     = 'tasks?project=01'
-        TST_PREFIX    = 'pj01_tasks'         # Prefix of the file names containing the mocked responses.
-        TST_AVAILABLE = 3                    # Number of mocked pages available to respond the query.
-        TST_PER_PAGE  = 30                   # Items per page in the mocked Taiga service.
+        # test config:
+        TST_QUERY      = 'tasks?project=01'
+        TST_PREFIX     = 'pj01_tasks'         # Prefix of the file names containing the mocked responses.
+        TST_AVAILABLE  = 3                    # Number of mocked pages available to respond the query.
+        TST_PER_PAGE   = 30                   # Items per page in the mocked Taiga service.
+        TST_SOME_MORE  = 10                   # Number of extra pages over available to ask for.
         
-        # dirty fix:
-        print()
-        
+        # test setup:
+        TST_FULL_PAGES = TST_AVAILABLE -1     # Number of mocked full pages available to respond the query.
         TST_URL = self.API_URL + TST_QUERY
-        Utilities.mock_pages( TST_PREFIX , TST_URL , TST_AVAILABLE )
+        self.mock_pages( TST_PREFIX , TST_URL , TST_AVAILABLE )
         
-        # AC1: limit, if limit < available:
-        limit = TST_AVAILABLE - 1
-        record = self.TST_DTC.rq( TST_QUERY , limit )        
+        # AC1: expect limit, if limit < available:
+        limit = TST_FULL_PAGES
+        record = self.TST_DTC.rq( TST_QUERY , limit )
         self.assertEqual( limit * TST_PER_PAGE , len(record) )
         
-        # AC2: available, if available =< limit:
-        record = self.TST_DTC.rq( TST_QUERY , TST_AVAILABLE + 10 ) 
-        self.assertLess(   (TST_AVAILABLE - 1) * TST_PER_PAGE , len(record) )
+        # AC2: expect available, if available =< limit:
+        limit = TST_AVAILABLE + TST_SOME_MORE
+        record = self.TST_DTC.rq( TST_QUERY , limit ) 
+        self.assertLess(        TST_FULL_PAGES * TST_PER_PAGE , len(record) )
         self.assertGreaterEqual( TST_AVAILABLE * TST_PER_PAGE , len(record) )
         
-        # AC3: available, on missing limit:
+        # AC3: expect available, on missing limit:
         record = self.TST_DTC.rq( TST_QUERY ) 
-        self.assertLess(   (TST_AVAILABLE - 1) * TST_PER_PAGE , len(record) )
+        self.assertLess(        TST_FULL_PAGES * TST_PER_PAGE , len(record) )
         self.assertGreaterEqual( TST_AVAILABLE * TST_PER_PAGE , len(record) )           
     
     
@@ -548,7 +583,8 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
          
         None should be missing. No extra item should be dragged along.
         '''
-        
+       
+        # test config:
         TST_PROJECT       = 'proj_id'
         TST_EXTRA_ITEM    = 'extra_item'
         TST_RESPONSE_BODY = {    TST_EXTRA_ITEM : 'Do NOT load me!'
@@ -559,6 +595,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                             ,    'total_points' : 666
                             }
         
+        # test setup:
         mock.register_uri( mock.GET
                          , '{}projects/{}/stats'.format( self.API_URL , TST_PROJECT )
                          , status=200
@@ -567,12 +604,12 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         record = self.TST_DTC.proj_stats( TST_PROJECT )
         
-        # no expected value is missing:
+        # AC1: no expected value is missing:
         expected_field_names = TST_RESPONSE_BODY.keys() - [TST_EXTRA_ITEM]
         for field in expected_field_names:
             self.assertEqual( record[field] , TST_RESPONSE_BODY[field] )
         
-        # no unexpected item is present:
+        # AC2: no unexpected item is present:
         with self.assertRaises( KeyError , msg='TaigaClient.pj_stats is reading unwanted items!'):
             bah = record[TST_EXTRA_ITEM]
     
@@ -583,7 +620,8 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         None should be missing. No extra item should be dragged along.
         '''
-        
+       
+        # test config:
         TST_PROJECT       = 'proj_id'
         TST_EXTRA_ITEM    = 'extra_item'
         TST_RESPONSE_BODY = {        TST_EXTRA_ITEM : 'Do NOT load me!'
@@ -595,6 +633,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                             , 'issues_per_status'   : ['status1','status2']
                             }
         
+        # test setup:
         mock.register_uri( mock.GET
                          , '{}projects/{}/issues_stats'.format( self.API_URL , TST_PROJECT )
                          , status=200
@@ -603,12 +642,12 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         record = self.TST_DTC.proj_issues_stats( TST_PROJECT )
         
-        field_names = [ 'total_issues' , 'opened_issues' , 'closed_issues' ]
-        for field in field_names:
+        FIELD_NAMES = ( 'total_issues' , 'opened_issues' , 'closed_issues' )
+        for field in FIELD_NAMES:
             self.assertEqual( record[field] , TST_RESPONSE_BODY[field] )
         
-        group_names = [ 'priority' , 'severity' , 'status' ]
-        for group in group_names:
+        GROUP_NAMES = ( 'priority' , 'severity' , 'status' )
+        for group in GROUP_NAMES:
             field = 'issues_per_'+group
             self.assertFalse( set(record[field]) - set(TST_RESPONSE_BODY[field]) )
     
@@ -659,8 +698,9 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         def mock_url( list_name , query , project , max_page ):
             name  = 'pj{}_{}'.format(project , list_name )
             url   = self.API_URL + query.format( project )
-            Utilities.mock_pages( name , url , max_page )
+            self.mock_pages( name , url , max_page )
         
+        # test config:
         #                     item ,  url                       , (P ,exp) , (P ,exp)
         STEPS = ( (       'basics' , 'projects/{}'              , (1 , 76) , (1 , 76) )
                 , (        'stats' , 'projects/{}/stats'        , (1 , 11) , (1 , 11) )
@@ -672,20 +712,19 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                 )
         TST_PROJECTS = ('01' , '02')
         
-        # dirty fix:
-        print()
-        
         pn = 0
         for project in TST_PROJECTS:
             pn += 1
             
+            # given a test setup:
             for s in STEPS:
                 item = s[0]
                 url  = s[1]
                 page = s[1+pn][0]
 
                 mock_url( item , url , project , page )
-                        
+            
+            # when:
             data = self.TST_DTC.proj( project )
             
             """
@@ -696,6 +735,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
             # print( str(data) )
             """
             
+            # then checks:
             for s in STEPS:
                 item     = s[0]
                 expected = s[1+pn][1]
@@ -760,22 +800,46 @@ class TestsUnderConstruction(unittest.TestCase):
 class Utilities(unittest.TestCase):
     ''' Testing Utilities.'''
     
+    def http_code( name ):
+        HTTP_CODES = { '200': 'ok'
+                     , '401': 'unauthorized'
+                     , '403': 'forbidden'
+                     }
+        aux = name.strip().lower()
+        keys = list(HTTP_CODES.keys()  )
+        vals = list(HTTP_CODES.values())
+        if aux in HTTP_CODES.values():
+            return keys[ vals.index( aux ) ]
+        else:
+            return '-1'
+        return
+    
+    def http_code_nr( name ):
+        return int(Utilities.http_code( name ))
+    
+    def test_http_codes(self):
+        nr = Utilities.http_code_nr
+        self.assertEqual( '403' , Utilities.http_code( 'Forbidden' ) )
+        self.assertEqual(  200  , Utilities.http_code_nr( 'OK'     ) )
+        self.assertEqual(  200  , nr( 'OK' ) )
+
+
     def read_test_config(config_file):
         '''Read Testing configuration'''
-         
+        
         # read config file:
         config = configparser.RawConfigParser()
         config.read( config_file )
-         
+        
         # take url:
         try:
             url = config.get( 'taiga-site' , 'API_URL' )
         except KeyError:
             url = None
-         
+        
         # take credentials (2 options):
         tag = 'taiga-default-credentials'
-         
+        
         try:
             usr = config.get( tag , 'User'     )
             pwd = config.get( tag , 'Password' )
@@ -789,11 +853,11 @@ class Utilities(unittest.TestCase):
             # print( 'Debug: TestTaigaClient.setup_taiga has read token {}.'.format( tkn ) )
         except KeyError:
             tkn = None
-
-         
+        
+        
         # load other test data:
         cfg = config
-
+        
         return { 'url':url , 'usr':usr , 'pwd':pwd , 'tkn':tkn , 'cfg':cfg }
     
     
@@ -853,8 +917,7 @@ class Utilities(unittest.TestCase):
      
     def capture_pj_list_RS(self, project_id, list_name, page=None):
         '''Testing maintainance utility to capture http responses.'''
-
-        self.setup_taiga()
+        
         destination = 'data/taiga/dnld/{}.P{}.PART.RS'
         url = '{}?project={}'
         if page:
@@ -864,7 +927,7 @@ class Utilities(unittest.TestCase):
         else:
            url = url.format( list_name , project_id )
            destination = destination.format( list_name , "1" )
-
+        
         self.capture_basic_RS( url , destination )
      
      
@@ -912,4 +975,3 @@ if __name__ == "__main__":
 else:
     print( 'Debug: Executing test_taiga as "{}".'.format(__name__) )
     print( '-' * 40 )
-
