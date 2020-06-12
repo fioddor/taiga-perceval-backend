@@ -83,8 +83,8 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
     TST_DTC = None   # Default Taiga Client for testing.
      
      
-    def setup_taiga(self):
-        '''Set up Taiga service'''
+    def setUp(self):
+        '''Set up tests.'''
         
         # clean up common test data:
         self.API_URL = None
@@ -136,8 +136,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
                   it uses valid data. Thar data is proven valid through real calls in other tests
                   of this class.
         '''
-        self.setup_taiga()
-         
         tmc = TaigaClient( url=self.API_URL , user=self.API_USR , pswd=self.API_PWD )
         self.assertEqual( None , tmc.get_token() )
          
@@ -146,7 +144,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
         '''Test Taiga Client initializations.'''
          
         SAFE_API_COMMAND = 'projects'
-        self.setup_taiga()
          
         # user&pswd init(implicit url, user, pswd) executes (no exception): 
         tmc = TaigaClient( self.API_URL , self.API_USR , self.API_PWD )
@@ -190,7 +187,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
         '''
         SAFE_API_COMMAND = 'projects'
         EXPECTED_RS_JSON = {"_error_message": "Invalid token", "_error_type": "taiga.base.exceptions.NotAuthenticated"} 
-        self.setup_taiga()
          
         tmc = TaigaClient( url=self.API_URL , token='wrong_token' )
         
@@ -208,8 +204,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
         def td( var_name ):
             return self.TST_CFG.get( 'test-data' , var_name )
          
-        self.setup_taiga()
-         
         record = self.TST_DTC.proj_stats( td( 'proj_stats_id' ) )
          
         field_names = [ 'total_milestones' , 'defined_points' , 'assigned_points' , 'closed_points' ]
@@ -222,8 +216,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
          
         def td( var_name ):
             return self.TST_CFG.get( 'test-data' , var_name )
-         
-        self.setup_taiga()
          
         record = self.TST_DTC.proj_issues_stats( td( 'proj_issues_stats_id' ) )
         field_names = [ 'total_issues' , 'opened_issues' , 'closed_issues' ]
@@ -240,8 +232,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
          
         def td( var_name ):
             return self.TST_CFG.get( 'test-data' , var_name )
-         
-        self.setup_taiga()
          
         project_id = td( 'proj_{}_id'.format( list_name ) )
         json_list = self.TST_DTC.rq( '{}?project={}'.format( list_name , project_id ) )
@@ -278,7 +268,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
     def OFF_test_proj_export(self):
         '''Taiga export doesn't work due to permissions.'''
          
-        self.setup_taiga()
         tmc = TaigaClient( url=self.API_URL , token=self.API_TKN )
          
         response = tmc.basic_rq('exporter/156665')
@@ -294,7 +283,6 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
         
         Pending: Improve assert.
         '''
-        self.setup_taiga()
         
         data = self.TST_DTC.proj(156665)
          
@@ -321,7 +309,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     TST_DTC = None   # Default Taiga Client for testing.
     
     
-    def setup_taiga(self):
+    def setUp(self):
         '''Set up Taiga service'''
         
         # reset common test data:
@@ -338,7 +326,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         b) url, user and pswd.
         '''
          
-        self.setup_taiga()
         API_USR = 'a_user'
         API_PWD = 'a_pswd'
         
@@ -368,7 +355,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     
     def test_init_with_token(self):
         '''A token-born client...'''
-        self.setup_taiga()
         
         # ...has its token:
         self.assertEqual( self.TST_DTC.get_token() , self.API_TKN )
@@ -383,7 +369,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         Client init doesn't immediately connect to API. This would fail later on, at login.
         '''
-        self.setup_taiga()
         
         # a fresh user&pswd client lacks a token yet:
         tmc = TaigaClient( url=self.API_URL , user='a_random_user' , pswd='an_invalid_password' )
@@ -409,7 +394,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         '''Taiga Client initializations.'''
          
         SAFE_API_COMMAND = 'projects'
-        self.setup_taiga()
         mock.register_uri( mock.GET
                          , self.API_URL + SAFE_API_COMMAND
                          , body=read_file('data/taiga/projects.body.RS')
@@ -460,7 +444,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     def test_login_fail(self):
         '''Taiga denies permission.'''
         
-        self.setup_taiga()
         mock.register_uri( mock.POST
                          , self.API_URL + 'auth'
                          , status=403
@@ -487,7 +470,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                              )
             print(query)
         
-        self.setup_taiga()
         for u in [ 'deny' , 'projects/id' , 'projects/id/stats', 'projects/id/issues_stats' ]:
             mock_url( u )
         tc = self.TST_DTC
@@ -524,7 +506,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                                     '''
                              )
             #print(query)
-        self.setup_taiga()
         for u in [ 'deny' , 'projects/id' , 'projects/id/stats', 'projects/id/issues_stats' ]:
             mock_url( u )
         tc = self.TST_DTC
@@ -556,7 +537,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         # dirty fix:
         print()
         
-        self.setup_taiga()
         TST_URL = self.API_URL + TST_QUERY
         Utilities.mock_pages( TST_PREFIX , TST_URL , TST_AVAILABLE )
         
@@ -593,7 +573,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                             ,    'total_points' : 666
                             }
         
-        self.setup_taiga()
         mock.register_uri( mock.GET
                          , '{}projects/{}/stats'.format( self.API_URL , TST_PROJECT )
                          , status=200
@@ -630,7 +609,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                             , 'issues_per_status'   : ['status1','status2']
                             }
         
-        self.setup_taiga()
         mock.register_uri( mock.GET
                          , '{}projects/{}/issues_stats'.format( self.API_URL , TST_PROJECT )
                          , status=200
@@ -662,7 +640,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                              ,            body=           read_file('data/taiga/{}.P{}.body.RS'.format(list_name , page))
                              , forcing_headers=json.loads(read_file('data/taiga/{}.P{}.head.RS'.format(list_name , page)).replace( "'" , '"' ))
                              )
-        self.setup_taiga()
         TST_URL     = '{}?project={}'.format( TST_LIST , TST_PROJECT )
         # order is important for httpretty mock?:
         mock_list( self.API_URL + TST_URL + '&page=2' , TST_LIST , 2 )
@@ -712,7 +689,6 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         # dirty fix:
         print()
         
-        self.setup_taiga()
         pn = 0
         for project in TST_PROJECTS:
             pn += 1
@@ -748,9 +724,9 @@ class TestsUnderConstruction(unittest.TestCase):
 
     Sandbox for new testing aproaches. Spikes and other prototypes are developed first here.
     '''
-     
+    
+    
     def OFF_test_api_command(self):
-        self.setup_taiga()
         tmc = TaigaClient( url=self.API_URL , token=self.API_TKN )
          
         response1 = tmc.basic_rq('projects?is_backlog_activated=true&is_kanban_activated=true')
@@ -780,7 +756,6 @@ class TestsUnderConstruction(unittest.TestCase):
     def OFF_test_under_construction(self):
         '''This test is under construction.'''
          
-        self.setup_taiga()
         tmc = TaigaClient( url=self.API_URL , token=self.API_TKN )
          
         response = tmc.basic_rq('new API command here')
@@ -951,3 +926,4 @@ if __name__ == "__main__":
 else:
     print( 'Debug: Executing test_taiga as "{}".'.format(__name__) )
     print( '-' * 40 )
+
