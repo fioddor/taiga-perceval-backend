@@ -73,26 +73,18 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
                them, andthus, failures might be false positives.
     """
      
-    # Configured test data to be passed from common setup to testcases:
-    API_URL = None
-    API_USR = None
-    API_PWD = None
-    API_TKN = None    
-     
-    TST_CFG = None   # Configured test data.
-    TST_DTC = None   # Default Taiga Client for testing.
-     
-     
-    def setUp(self):
+    
+    @classmethod
+    def setUpClass(cls):
         '''Set up tests.'''
         
         # clean up common test data:
-        self.API_URL = None
-        self.API_USR = None
-        self.API_PWD = None
-        self.API_TKN = None
-        self.TST_CFG = None
-        self.TST_DTC = None
+        cls.API_URL = None
+        cls.API_USR = None
+        cls.API_PWD = None
+        cls.API_TKN = None
+        cls.TST_CFG = None
+        cls.TST_DTC = None
          
         # read config file:
         cfg = Utilities.read_test_config( CFG_FILE )
@@ -100,7 +92,7 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
          
         # take url:
         if cfg['url']:
-            self.API_URL = cfg['url']
+            cls.API_URL = cfg['url']
         else:
             raise Exception( 'Missing url in {}.'.format( CFG_FILE ) )
         
@@ -108,22 +100,22 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
         
         has_usr_pwd = cfg['usr'] and cfg['pwd']
         if has_usr_pwd:
-            self.API_USR = cfg['usr']
-            self.API_PWD = cfg['pwd']
-            # print( 'Debug: TestTaigaClient.setup_taiga has read user {}, pswd {}.'.format( self.API_USR , self.API_PWD ) )
+            cls.API_USR = cfg['usr']
+            cls.API_PWD = cfg['pwd']
+            # print( 'Debug: TestTaigaClient.setup_taiga has read user {}, pswd {}.'.format( cls.API_USR , cls.API_PWD ) )
          
         has_token = cfg['tkn']
         if has_token:
-            self.API_TKN = cfg['tkn']
-             # print( 'Debug: TestTaigaClient.setup_taiga has read token {}.'.format( self.API_TKN ) )
+            cls.API_TKN = cfg['tkn']
+             # print( 'Debug: TestTaigaClient.setup_taiga has read token {}.'.format( cls.API_TKN ) )
          
         if not (has_usr_pwd or hastoken):
             raise Exception('TestTaigaClient.setup_taiga FAILED due to test data missing: credentials missing in test config file.')
          
         # load other test data:
-        self.TST_CFG = cfg['cfg']
+        cls.TST_CFG = cfg['cfg']
         if has_token:
-            self.TST_DTC = TaigaClient( url=self.API_URL , token=self.API_TKN )
+            cls.TST_DTC = TaigaClient( url=cls.API_URL , token=cls.API_TKN )
      
      
     def test_init_with_user_and_pswd(self):
@@ -302,20 +294,14 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     Pending: - Complete pending test_cases. 
     """
     
-    # Configured test data to be passed from common setup to testcases:
-    API_URL = None
-    API_TKN = None    
-    
-    TST_DTC = None   # Default Taiga Client for testing.
-    
-    
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         '''Set up Taiga service'''
         
-        # reset common test data:
-        self.API_URL = 'https://a.taiga.instance/API/V9/'
-        self.API_TKN = 'a_clumsy_token'
-        self.TST_DTC = TaigaClient( url=self.API_URL , token=self.API_TKN )
+        cls.API_URL = 'https://a.taiga.instance/API/V9/'
+        cls.API_TKN = 'a_clumsy_token'
+        # Default Taiga Client for testing.
+        cls.TST_DTC = TaigaClient( url=cls.API_URL , token=cls.API_TKN )
     
     
     def test_init_without_expected_arguments_causes_exception(self):
