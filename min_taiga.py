@@ -25,6 +25,7 @@
 
 import requests
 from math import ceil
+#from ...client import HttpClient
 
 import logging
 logging.basicConfig( level=logging.INFO ) #DEBUG )
@@ -32,8 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 
-
-class TaigaMinClient():
+class TaigaMinClient(): #HttpClient):
     '''Minimalistic Taiga Client.
     
     Usage..: 1. Instantiate object from other python program with either
@@ -77,7 +77,13 @@ class TaigaMinClient():
         logger.debug( self.ME+'.set_headers as ' + str(self.headers) )
     
     
-    def __init__(self, url=None, user=None, pswd=None, token=None):
+    def __init__(self
+                , url=None, ssl_verify=True
+                , user=None, pswd=None, token=None
+                , sleep_time=1, max_retries=5
+                , extra_retry_after_status=[500 , 502]
+                , archive=False, from_archive=None
+                ):
         '''Init client.
         
         :param:   url: url of the Taiga instance. Mandatory.
@@ -87,14 +93,19 @@ class TaigaMinClient():
         If all optional parameters are missing raises Exception.
         If all optional parameters are provided token is taken while user and pswd
         are ignored.
+
+        Pending: - headers
+                 - ssl_verify
+                 - throttling
+                 - archive
         '''
-         
+        
         ME = self.ME + '.__init__'
-         
+        
         if not url:
             raise Missing_Init_Arguments( 'url (Taiga API base URL).')
         self.base_url = url
-         
+        
         if token:
             self.token = token
             self.__set_headers__()
@@ -105,6 +116,12 @@ class TaigaMinClient():
             logger.debug( '{} {}:{}@{}'.format(ME , self.user , self.censor(self.pswd) , self.base_url) )
         else:
             raise Missing_Init_Arguments( 'either API token or Taiga user and pswd.' )
+        
+        #super().__init__( url, ssl_verify=False, extra_headers=self.headers
+        #                , sleep_time=sleep_time, max_retries=max_retries
+        #                , extra_retry_after_status=extra_retry_after_status
+        #                , archive=False, from_archive=None
+        #                )
     
     
     def get_token(self):
@@ -137,7 +154,7 @@ class TaigaMinClient():
             logger.error( ME + ' Rs.status_code : ' + str(rs.status_code )    )
             logger.error( ME + ' Rs.text:\n'        + rs.text                 )
             raise Exception( ME + 'failed. Check the log!' )
-     
+    
     
     def __http_get__(self, url , caller ):
         '''Wrap the request debugging and failure handling.
@@ -157,6 +174,9 @@ class TaigaMinClient():
             raise Uninitiated_TaigaClient( '.{}({}).'.format( me , url) )
         
         logger.debug(  '/ {}({})'.format( me , url ) )
+        
+        #response = super().fetch( url , method=HttpClient.GET )
+            
         response = requests.get( url , headers=self.headers )
         logger.debug( '\\ {}({})'.format( me , url ) )
 
