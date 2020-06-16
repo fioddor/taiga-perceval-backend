@@ -20,13 +20,6 @@
 # Purpose: Automatic tests for TaigaClient.
 #
 # Design.: - Unittest as framework.
-#          - More and better tests:
-#            - Wrong token in more calls.
-#            - Mocked unit tests.
-#            - Corrected tests.
-#          - Based on min_taiga.11.py:
-#            - Checks for specific TaigaClient exceptions. This
-#              unveiled some test errors. Tests were corrected.
 #
 # Authors:
 #     Igor Zubiaurre <fioddor@gmail.com>
@@ -49,9 +42,12 @@ import unittest                       # common usage.
 import configparser                   # for TestTaigaClientAgainstRealServer.
 import httpretty as mock, os , json   # for TestTaigaClientAgainstMockServer.
 
+import pkg_resources
+pkg_resources.declare_namespace('perceval.backends')
+
 # for common usage:
-from min_taiga import TaigaMinClient as TaigaClient
-from min_taiga import *
+from perceval.backends.core.min_taiga import TaigaMinClient as TaigaClient
+from perceval.backends.core.min_taiga import *
 
 
 CFG_FILE = 'test_minTaiga.cfg'
@@ -138,7 +134,7 @@ class TestTaigaClientAgainstRealServer(unittest.TestCase):
         SAFE_API_COMMAND = 'projects'
          
         # user&pswd init(implicit url, user, pswd) executes (no exception): 
-        tmc = TaigaClient( self.API_URL , self.API_USR , self.API_PWD )
+        tmc = TaigaClient( self.API_URL , user=self.API_USR , pswd=self.API_PWD )
          
         # a fresh user&pswd init sets no token:
         self.assertEqual( None , tmc.get_token() )
@@ -921,12 +917,12 @@ class Utilities(unittest.TestCase):
         destination = 'data/taiga/dnld/{}.P{}.PART.RS'
         url = '{}?project={}'
         if page:
-           url += '&page={}'
-           url = url.format( list_name , project_id , page )
-           destination = destination.format( list_name , page )
+            url += '&page={}'
+            url = url.format( list_name , project_id , page )
+            destination = destination.format( list_name , page )
         else:
-           url = url.format( list_name , project_id )
-           destination = destination.format( list_name , "1" )
+            url = url.format( list_name , project_id )
+            destination = destination.format( list_name , "1" )
         
         self.capture_basic_RS( url , destination )
      
@@ -942,14 +938,14 @@ class Utilities(unittest.TestCase):
         taiga = TaigaClient( url=config['url'] , token = config['tkn'] )
         response = taiga.basic_rq( url )
         if 200 == response.status_code:
-           with open( destination.replace('PART' , 'head') , 'w' ) as fh:
-               fh.write( str(response.headers) )
-           with open( destination.replace('PART' , 'body') , 'w' ) as fb:
-               fb.write( response.text )
+            with open( destination.replace('PART' , 'head') , 'w' ) as fh:
+                fh.write( str(response.headers) )
+            with open( destination.replace('PART' , 'body') , 'w' ) as fb:
+                fb.write( response.text )
         else:
-           print( 'FAIL:'          )
-           print( response.headers )
-           print( response.text    )
+            print( 'FAIL:'          )
+            print( response.headers )
+            print( response.text    )
 
 
 
@@ -975,3 +971,4 @@ if __name__ == "__main__":
 else:
     print( 'Debug: Executing test_taiga as "{}".'.format(__name__) )
     print( '-' * 40 )
+
