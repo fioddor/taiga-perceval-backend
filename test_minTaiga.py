@@ -423,7 +423,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         
         # user&pswd init(implicit url, user, pswd) executes (no exception): 
-        tmc = TaigaClient( self.API_URL , 'a_user' , 'a_password' )
+        tmc = TaigaClient( self.API_URL , user='a_user' , pswd='a_password' )
          
         # a fresh user&pswd init sets no token:
         self.assertEqual( None , tmc.get_token() )
