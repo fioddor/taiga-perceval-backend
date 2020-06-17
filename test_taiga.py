@@ -20,6 +20,10 @@
 # Purpose: Automatic tests for TaigaClient.
 #
 # Design.: - Unittest as framework.
+#          - Based on taiga.py:
+#            - Min_taiga.py based on requests directly and this low-level control enabled it to raise its own
+#              exceptions. In contrast, taiga.py bases on Perceval's httpClient, which encapsulates some low-level
+#              control policy and raises requests' exceptions.
 #
 # Authors:
 #     Igor Zubiaurre <fioddor@gmail.com>
@@ -46,15 +50,15 @@ import pkg_resources
 pkg_resources.declare_namespace('perceval.backends')
 
 # for common usage:
-from perceval.backends.core.min_taiga import TaigaMinClient as TaigaClient
-from perceval.backends.core.min_taiga import *
+from perceval.backends.core.taiga import TaigaMinClient as TaigaClient
+from perceval.backends.core.taiga import *
 
 
 CFG_FILE = 'test_minTaiga.cfg'
 
 
 
-class TestTaigaClientAgainstRealServer(unittest.TestCase):
+class OFF_TestTaigaClientAgainstRealServer(unittest.TestCase):
     """Integration testing.
 
     Purpose: Integration
@@ -488,20 +492,17 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
             mock_url( u )
         tc = self.TST_DTC
         
-        # AC1: basic_rq() raises no exception:
-        response = tc.basic_rq( 'deny' )
-        response.status_code=HTTP_PERMISSION_DENIED
-        
-        # AC1: everything else is paginated and rq() raises Unexpected_HTTPcode:
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
+            bah = tc.basic_rq( 'deny' )
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.rq( 'deny' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.proj_stats( 'id' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.proj_issues_stats( 'id' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.proj( 'id' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.get_lst_data_from_api( 'projects/id/stats', [] )
     
     
@@ -525,18 +526,17 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
             mock_url( u )
         tc = self.TST_DTC
         
-        response = tc.basic_rq( 'deny' )              # rq raises no exception
-        response.status_code=HTTP_UNAUTHORIZED
-        
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
+            bah = tc.basic_rq( 'deny' )
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.rq( 'deny' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.proj_stats( 'id' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.proj_issues_stats( 'id' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.proj( 'id' )
-        with self.assertRaises( Unexpected_HTTPcode ):
+        with self.assertRaises( requests.exceptions.HTTPError ):
             bah = tc.get_lst_data_from_api( 'projects/id/stats', [] )
     
     
@@ -657,14 +657,15 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         
         def mock_list(url , list_name , page=None):
             mock.register_uri( mock.GET, url
-                             ,          status=200
-                             ,            body=           read_file('data/taiga/{}.P{}.body.RS'.format(list_name , page))
-                             , forcing_headers=json.loads(read_file('data/taiga/{}.P{}.head.RS'.format(list_name , page)).replace( "'" , '"' ))
+                             , match_querystring=True
+                             ,            status=200
+                             ,              body=           read_file('data/taiga/{}.P{}.body.RS'.format(list_name , page))
+                             ,   forcing_headers=json.loads(read_file('data/taiga/{}.P{}.head.RS'.format(list_name , page)).replace( "'" , '"' ))
                              )
         TST_URL     = '{}?project={}'.format( TST_LIST , TST_PROJECT )
         # order is important for httpretty mock?:
-        mock_list( self.API_URL + TST_URL + '&page=2' , TST_LIST , 2 )
         mock_list( self.API_URL + TST_URL             , TST_LIST , 1 )
+        mock_list( self.API_URL + TST_URL + '&page=2' , TST_LIST , 2 )
         
         lst = self.TST_DTC.rq( TST_URL )
         
@@ -876,7 +877,7 @@ class Utilities(unittest.TestCase):
                              ,              body=           read_file(body_file)
                              ,   forcing_headers=json.loads(read_file(head_file).replace( "'" , '"' ))
                              )
-            print( 'Mock set up for {}'.format(url) )
+            #print( 'Mock set up for {}'.format(url) )
     
     
     def test_capture(self):
