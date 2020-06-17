@@ -54,7 +54,7 @@ from perceval.backends.core.taiga import TaigaMinClient as TaigaClient
 from perceval.backends.core.taiga import *
 
 
-CFG_FILE = 'test_minTaiga.cfg'
+CFG_FILE = 'test_taiga.cfg'
 
 
 
