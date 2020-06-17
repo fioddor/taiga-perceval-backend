@@ -25,7 +25,7 @@
 
 import requests
 from math import ceil
-#from ...client import HttpClient
+from ...client import HttpClient
 
 import logging
 logging.basicConfig( level=logging.INFO ) #DEBUG )
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 
-class TaigaMinClient(): #HttpClient):
+class TaigaMinClient(HttpClient):
     '''Minimalistic Taiga Client.
     
     Usage..: 1. Instantiate object from other python program with either
@@ -49,17 +49,16 @@ class TaigaMinClient(): #HttpClient):
     Pending: - We don't yet see a compelling reason to implement application-token authentication.
              - In our reference Taiga instance (taiga.io) project export needs special permissions we don't have.
     '''
-    
-    
-    ME = 'TaigaMinClient'
+ 
+    VERSION = '20200617A'
+    ME = 'TaigaMinClient-{}'.format( VERSION )
     H_STANDARD_BASE = { 'Content-Type': 'application/json'
                       ,   'Connection': 'close'
                       }
     
     token   = None
-    headers = None
-    
-    
+
+
     
     def censor(self, uncensored ):
         '''Returns a censored version of the given text.'''
@@ -71,8 +70,13 @@ class TaigaMinClient(): #HttpClient):
     def __set_headers__(self):
         '''(Re)sets session headers according to current client property values.'''
         
-        self.headers = self.H_STANDARD_BASE.copy()
-        self.headers['Authorization'] = 'Bearer ' + self.token
+        try: 
+            self.headers.update( self.H_STANDARD_BASE )
+        except AttributeError:
+            self.headers = self.H_STANDARD_BASE.copy()
+        
+        if self.token:
+            self.headers['Authorization'] = 'Bearer ' + self.token
         
         logger.debug( self.ME+'.set_headers as ' + str(self.headers) )
     
@@ -108,7 +112,6 @@ class TaigaMinClient(): #HttpClient):
         
         if token:
             self.token = token
-            self.__set_headers__()
             logger.debug( ME+'( ' + self.censor(self.token) + ' ).' ) 
         elif user and pswd:
             self.user = user
@@ -116,19 +119,31 @@ class TaigaMinClient(): #HttpClient):
             logger.debug( '{} {}:{}@{}'.format(ME , self.user , self.censor(self.pswd) , self.base_url) )
         else:
             raise Missing_Init_Arguments( 'either API token or Taiga user and pswd.' )
+       
+        self.__set_headers__()
+        super().__init__( base_url=url, extra_headers=self.headers
+                        , sleep_time=sleep_time, max_retries=max_retries
+                        , extra_retry_after_status=extra_retry_after_status
+                        , archive=False, from_archive=None
+                        #, ssl_verify=False
+                        )
         
-        #super().__init__( url, ssl_verify=False, extra_headers=self.headers
-        #                , sleep_time=sleep_time, max_retries=max_retries
-        #                , extra_retry_after_status=extra_retry_after_status
-        #                , archive=False, from_archive=None
-        #                )
+        self.version += self.VERSION
+   
+    
+    def __del__(self):
+        '''Silent destruction on uninitiated TaigaClient.'''
+        try:
+            super().__del__()
+        except AttributeError:
+            pass
     
     
     def get_token(self):
         '''Returns session token for reuse.'''
         return self.token
-     
-     
+    
+    
     def login(self):
         '''Gets session token from API and (re)sets session headers accordingly.'''
         
@@ -142,15 +157,17 @@ class TaigaMinClient(): #HttpClient):
         
         rs = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_STANDARD_BASE )
         rs.close()
-         
+        
         if 200 == rs.status_code:
             self.token = rs.json()['auth_token']
             self.__set_headers__()
         else:
+            censored = rs.request.body.replace(self.pswd , self.censor(self.pswd))
+            
             ME = self.ME + '.login'
             logger.error( ME + ' failed:'                                     )
             logger.error( ME + ' Rq.headers : '     + str(rs.request.headers) )
-            logger.error( ME + ' Rq.body : '        + str(rs.request.body)    )
+            logger.error( ME + ' Rq.body : '        + str(censored)           )
             logger.error( ME + ' Rs.status_code : ' + str(rs.status_code )    )
             logger.error( ME + ' Rs.text:\n'        + rs.text                 )
             raise Exception( ME + 'failed. Check the log!' )
@@ -170,16 +187,16 @@ class TaigaMinClient(): #HttpClient):
         '''
         me = self.ME + caller
         
-        if not self.headers:
+        if not self.token:
             raise Uninitiated_TaigaClient( '.{}({}).'.format( me , url) )
         
         logger.debug(  '/ {}({})'.format( me , url ) )
         
-        #response = super().fetch( url , method=HttpClient.GET )
-            
-        response = requests.get( url , headers=self.headers )
+        response = super().fetch( url , method=HttpClient.GET )
+        
+        #response = requests.get( url , headers=self.headers )
         logger.debug( '\\ {}({})'.format( me , url ) )
-
+        
         return response
     
     
@@ -213,7 +230,7 @@ class TaigaMinClient(): #HttpClient):
         
         response = get_page( api_command )
         output = response.json()
-        
+       
         if all(key in response.headers for key in ( 'x-paginated' , 'x-pagination-count' , 'x-paginated-by' )):
             max_taiga = ceil( int(response.headers['x-pagination-count'])
                             / int(response.headers['x-paginated-by'    ])
@@ -222,7 +239,7 @@ class TaigaMinClient(): #HttpClient):
                 maximum = min([ max_page , max_taiga ])
             else:
                 maximum = max_taiga
-             
+            
             while int(response.headers['x-pagination-current']) < maximum:
                 next_url = response.headers['X-Pagination-Next']
                 response = get_page( next_url )
@@ -338,4 +355,3 @@ class Missing_Expected_Item(Exception):
         if details:
             ERR_MESSAGE += ' ' + details
         super().__init__( ERR_MESSAGE )
-
