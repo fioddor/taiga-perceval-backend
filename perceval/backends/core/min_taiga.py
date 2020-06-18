@@ -23,7 +23,6 @@
 #
 #----------------------------------------------------------------------------------------------------------------------
 
-import requests
 from math import ceil
 from ...client import HttpClient
 
@@ -50,7 +49,7 @@ class TaigaMinClient(HttpClient):
              - In our reference Taiga instance (taiga.io) project export needs special permissions we don't have.
     '''
  
-    VERSION = '20200617A'
+    VERSION = '20200618A'
     ME = 'TaigaMinClient-{}'.format( VERSION )
     H_STANDARD_BASE = { 'Content-Type': 'application/json'
                       ,   'Connection': 'close'
@@ -155,7 +154,7 @@ class TaigaMinClient(HttpClient):
             raise Login_Lacks_Credentials
         data_ba = bytearray( data_str , encoding='utf-8' )
         
-        rs = requests.post( self.base_url+'auth' , data=data_ba , headers=self.H_STANDARD_BASE )
+        rs = super().fetch( self.base_url+'auth' , payload=data_ba , headers=self.H_STANDARD_BASE , method=HttpClient.POST )
         rs.close()
         
         if 200 == rs.status_code:
@@ -194,7 +193,6 @@ class TaigaMinClient(HttpClient):
         
         response = super().fetch( url , method=HttpClient.GET )
         
-        #response = requests.get( url , headers=self.headers )
         logger.debug( '\\ {}({})'.format( me , url ) )
         
         return response
