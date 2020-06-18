@@ -20,10 +20,10 @@
 # Purpose: Automatic tests for TaigaClient.
 #
 # Design.: - Unittest as framework.
-#          - Based on taiga.py:
-#            - Min_taiga.py based on requests directly and this low-level control enabled it to raise its own
-#              exceptions. In contrast, taiga.py bases on Perceval's httpClient, which encapsulates some low-level
-#              control policy and raises requests' exceptions.
+#          - Based on taiga-20200618A:
+#            taiga-20200618A no longer bases directly on requests, and thus, request's exceptions need to be
+#            explicitly imported.
+#          - Slightly deeper login testing.
 #
 # Authors:
 #     Igor Zubiaurre <fioddor@gmail.com>
@@ -44,6 +44,7 @@
 
 import unittest                       # common usage.
 import configparser                   # for TestTaigaClientAgainstRealServer.
+import requests.exceptions            
 import httpretty as mock, os , json   # for TestTaigaClientAgainstMockServer.
 
 import pkg_resources
@@ -376,30 +377,45 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
             bah = self.TST_DTC.login()
     
     
+    @mock.activate
     def test_init_with_user_and_pswd(self):
         '''A client is created without token.
         
         Client init doesn't immediately connect to API. This would fail later on, at login.
         '''
         
+        mock.register_uri( mock.POST
+                         , self.API_URL + 'auth'
+                         , body=read_file('data/taiga/login.body.RS').replace( "'" , '"' )
+                         , status=self.http_code_nr( 'OK' )
+                         )
+
         # a fresh user&pswd client lacks a token yet:
-        tmc = TaigaClient( url=self.API_URL , user='a_random_user' , pswd='an_invalid_password' )
-        self.assertEqual( None , tmc.get_token() )
+        tc = TaigaClient( url=self.API_URL , user='a_random_user' , pswd='an_invalid_password' )
+        self.assertEqual( None , tc.get_token() )
         
-        # without token nothing works:
+        # without token nothing works (own exception):
         DUMMY_URL = 'should NOT even try'
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.basic_rq(         DUMMY_URL)
+            bah = tc.basic_rq(         DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.rq(               DUMMY_URL)
+            bah = tc.rq(               DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.proj_stats(       DUMMY_URL)
+            bah = tc.proj_stats(       DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.proj_issues_stats(DUMMY_URL)     
+            bah = tc.proj_issues_stats(DUMMY_URL)     
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.proj(             DUMMY_URL)
+            bah = tc.proj(             DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tmc.get_lst_data_from_api( DUMMY_URL , [] )
+            bah = tc.get_lst_data_from_api( DUMMY_URL , [] )
+        
+        # right after login, token is set:
+        tc.login()
+        self.assertEqual( 'a_Mocked_Token' , tc.get_token() )
+        
+        # now, the dummy, unmocked url causes a different exception:
+        with self.assertRaises( requests.exceptions.ConnectionError ): 
+            bah = tc.rq( 'DummyEndPoint' )
     
     
     @mock.activate
