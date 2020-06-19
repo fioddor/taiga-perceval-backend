@@ -20,10 +20,7 @@
 # Purpose: Automatic tests for TaigaClient.
 #
 # Design.: - Unittest as framework.
-#          - Based on taiga-20200618A:
-#            taiga-20200618A no longer bases directly on requests, and thus, request's exceptions need to be
-#            explicitly imported.
-#          - Slightly deeper login testing.
+#          - Based on taiga-20200619A.
 #
 # Authors:
 #     Igor Zubiaurre <fioddor@gmail.com>
@@ -31,24 +28,19 @@
 # Pending:
 #   - Complete mocked tests:
 #     - proj cases
-#   - Integrate into perceval structure.
 #   - More TCs:
-#     - Throttle responses: HTTP 429
-#       { "_error_message": "Request was throttled.Expected available in 279 seconds."
-#       , "_error_type": "taiga.base.exceptions.Throttled"
-#       }
 #     - Expired token => HTTP 301?
-#   - Generalise Exceptions and other client-specific objects?
 #   - readfile shold be shared with gitlab (remove when integrating and ask for it to be moved).
 #----------------------------------------------------------------------------------------------------------------------
 
 import unittest                       # common usage.
-import configparser                   # for TestTaigaClientAgainstRealServer.
-import requests.exceptions            
+import configparser                   # common usage. 
 import httpretty as mock, os , json   # for TestTaigaClientAgainstMockServer.
 
 import pkg_resources
 pkg_resources.declare_namespace('perceval.backends')
+
+from grimoirelab_toolkit.datetime import datetime_utcnow
 
 # for common usage:
 from perceval.backends.core.taiga import TaigaMinClient as TaigaClient
@@ -58,20 +50,25 @@ from perceval.backends.core.taiga import *
 CFG_FILE = 'test_taiga.cfg'
 
 
-
-class OFF_TestTaigaClientAgainstRealServer(unittest.TestCase):
+@unittest.skip('Tests against real server disabled by default to avoid annoying the real taiga service.')
+class TestTaigaClientAgainstRealServer(unittest.TestCase):
     """Integration testing.
 
     Purpose: Integration
              + Regression test the server with the client.
              + Real fire tests to detect unacurate mocking.
-    Usage..: 1) Update credentials and token in CFG_FILE (taiga_site.cfg).
+
+    Usage..: 1) Update credentials and token in CFG_FILE (test_taiga.cfg).
              2) Update test data as needed.
-             3) Run.
+             3) Enable by commenting the leading @unittst.skip decorator.
+             4) Run.
+             5) Reenable the decorator if you're not going to run again in some time, to avoid
+                anoying the configured real Taiga service.
+
     Design.: + Test data are read from a config file.
              + Setup creates a default client to be reused.
              + Real Taiga projects are expected to grow. Obviously, we don't have control over
-               them, andthus, failures might be false positives.
+               them, and thus, failures might be false positives.
     """
      
     
@@ -86,11 +83,10 @@ class OFF_TestTaigaClientAgainstRealServer(unittest.TestCase):
         cls.API_TKN = None
         cls.TST_CFG = None
         cls.TST_DTC = None
-         
+        
         # read config file:
         cfg = Utilities.read_test_config( CFG_FILE )
         
-         
         # take url:
         if cfg['url']:
             cls.API_URL = cfg['url']
@@ -258,7 +254,8 @@ class OFF_TestTaigaClientAgainstRealServer(unittest.TestCase):
         return self.__test_pj_list__( 'wiki' )
      
      
-    def OFF_test_proj_export(self):
+    @unittest.skip("Taiga export doesn't have permissions.")
+    def test_proj_export(self):
         '''Taiga export doesn't work due to permissions.'''
          
         tmc = TaigaClient( url=self.API_URL , token=self.API_TKN )
@@ -290,8 +287,11 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
 
     Usage..: 0) Install httpretty.
              1) Run.
+
     Design.: + Taiga API client tested against a mock Taiga server.
+               + some mock responses are read from files.
              + Setup creates a default client to be reused.
+    
     Pending: - Complete pending test_cases. 
     """
     
@@ -493,6 +493,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         '''Taiga denies permission.'''
          
         HTTP_PERMISSION_DENIED = self.http_code_nr( 'Forbidden' )
+        HTTP_UNEXPECTED        = Unexpected_HTTPcode
         def mock_url( query ):
             mock.register_uri( mock.GET
                              , self.API_URL + query
@@ -508,17 +509,20 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
             mock_url( u )
         tc = self.TST_DTC
         
-        with self.assertRaises( requests.exceptions.HTTPError ):
-            bah = tc.basic_rq( 'deny' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        # AC1: basic_rq() raises no exception:
+        response = tc.basic_rq( 'deny' )
+        self.assertEqual( HTTP_PERMISSION_DENIED , response.status_code )
+
+        # AC2: everything else is paginated and rq() raises Unexpected_HTTPcode:
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.rq( 'deny' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj_stats( 'id' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj_issues_stats( 'id' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj( 'id' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.get_lst_data_from_api( 'projects/id/stats', [] )
     
     
@@ -527,6 +531,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         '''Taiga rejects wrong token.'''
         
         HTTP_UNAUTHORIZED = self.http_code_nr( 'Unauthorized' )
+        HTTP_UNEXPECTED   = Unexpected_HTTPcode
         def mock_url( query ):
             mock.register_uri( mock.GET
                              , self.API_URL + query
@@ -542,18 +547,59 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
             mock_url( u )
         tc = self.TST_DTC
         
-        with self.assertRaises( requests.exceptions.HTTPError ):
-            bah = tc.basic_rq( 'deny' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        # AC1: basic_rq() raises no exception:
+        response = tc.basic_rq( 'deny' )
+        self.assertEqual( HTTP_UNAUTHORIZED , response.status_code )
+
+        # AC2: everything else is paginated and rq() raises Unexpected_HTTPcode:
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.rq( 'deny' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj_stats( 'id' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj_issues_stats( 'id' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj( 'id' )
-        with self.assertRaises( requests.exceptions.HTTPError ):
+        with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.get_lst_data_from_api( 'projects/id/stats', [] )
+    
+    
+    @mock.activate
+    def test_throttling(self):
+        '''Taiga blocks reporting throttling.'''
+        
+        def gl_now():
+            ''' gets and formats current time'''
+            return datetime_utcnow().replace(microsecond=0).timestamp()
+        
+        # test config:
+        TST_QUERY = 'a_query'
+        TST_DELAY = 2
+        TST_ERROR_MSG = '{' + ''' "_error_message": "Request was throttled.Expected available in {} seconds."
+                                , "_error_type"   : "taiga.base.exceptions.Throttled"
+                              '''.format( TST_DELAY ) + '}'
+        
+        # test setup:
+        mock.register_uri( mock.GET
+                         , self.API_URL + TST_QUERY
+                         , responses=[ mock.Response( status=self.http_code_nr( 'Too Many Requests' )
+                                                    , body=TST_ERROR_MSG
+                                                    )
+                                     , mock.Response( status=self.http_code_nr( 'OK' )
+                                                    , body='{ "content": "some_content" }'
+                                                    )
+                                     ]
+                         )
+        tc = self.TST_DTC
+        
+        # test:
+        started = gl_now()
+        tc.rq( TST_QUERY )
+        finished = gl_now()
+        
+        # check:
+        elapsed = finished - started
+        self.assertLessEqual( TST_DELAY , elapsed )
     
     
     @mock.activate
@@ -765,7 +811,8 @@ class TestsUnderConstruction(unittest.TestCase):
     '''
     
     
-    def OFF_test_api_command(self):
+    @unittest.skip('This case is a draft or under construction.')
+    def test_api_command(self):
         tmc = TaigaClient( url=self.API_URL , token=self.API_TKN )
          
         response1 = tmc.basic_rq('projects?is_backlog_activated=true&is_kanban_activated=true')
@@ -791,8 +838,9 @@ class TestsUnderConstruction(unittest.TestCase):
                     # print(str(rec))
         return
      
-     
-    def OFF_test_under_construction(self):
+    
+    @unittest.skip('This case is a draft or under construction.')
+    def test_under_construction(self):
         '''This test is under construction.'''
          
         tmc = TaigaClient( url=self.API_URL , token=self.API_TKN )
@@ -814,9 +862,14 @@ class Utilities(unittest.TestCase):
     ''' Testing Utilities.'''
     
     def http_code( name ):
+        '''Returns HTTP codes (as strings) by their name.
+        
+        Used to improve readability.
+        '''
         HTTP_CODES = { '200': 'ok'
                      , '401': 'unauthorized'
                      , '403': 'forbidden'
+                     , '429': 'too many requests'
                      }
         aux = name.strip().lower()
         keys = list(HTTP_CODES.keys()  )
@@ -828,6 +881,10 @@ class Utilities(unittest.TestCase):
         return
     
     def http_code_nr( name ):
+        '''Returns HTTP codes as integers by their name.
+        
+        Used to improve readability.
+        '''
         return int(Utilities.http_code( name ))
     
     def test_http_codes(self):
@@ -896,10 +953,11 @@ class Utilities(unittest.TestCase):
             #print( 'Mock set up for {}'.format(url) )
     
     
+    @unittest.skip('This utility runner is disabled by default')
     def test_capture(self):
         '''Runner for testing utilities.
         
-        Usage: adapt and call
+        Usage: adapt, enable by commenting the leading unittest.skip decorator and call
         '''
         # self.capture_pj_list_RS( '297174' , 'tasks'     )
         # self.capture_pj_list_RS( '297174' , 'tasks' , 2 )
