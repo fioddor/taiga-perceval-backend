@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaigaMinClient(): #HttpClient):
+
     '''Minimalistic Taiga Client.
     
     Usage..: 1. Instantiate object from other python program with either
@@ -50,14 +51,13 @@ class TaigaMinClient(): #HttpClient):
     '''
     
     VERSION = '20200619A' 
+    
     ME = 'TaigaMinClient-{}'.format( VERSION )
     H_STANDARD_BASE = { 'Content-Type': 'application/json'
                       ,   'Connection': 'close'
                       }
     
     token   = None
-    headers = None
-    
     
     
     def censor(self, uncensored ):
@@ -115,7 +115,7 @@ class TaigaMinClient(): #HttpClient):
             logger.debug( '{} {}:{}@{}'.format(ME , self.user , self.censor(self.pswd) , self.base_url) )
         else:
             raise Missing_Init_Arguments( 'either API token or Taiga user and pswd.' )
-        
+    
     
     def get_token(self):
         '''Returns session token for reuse.'''
@@ -345,4 +345,3 @@ class Missing_Expected_Item(Exception):
         if details:
             ERR_MESSAGE += ' ' + details
         super().__init__( ERR_MESSAGE )
-
