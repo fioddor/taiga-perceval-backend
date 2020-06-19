@@ -30,6 +30,43 @@ import logging
 logging.basicConfig( level=logging.INFO ) #DEBUG )
 logger = logging.getLogger(__name__)
 
+from ...backend import Backend
+
+
+class Taiga(Backend):
+    '''Taiga backend for Perceval.
+
+    Blah, blah
+    '''
+    VERSION = '20200619A'
+    
+    def __init__(self, origin , url=None , token=None ):
+        super().__init__( origin )
+        
+        self.api_url = url
+        self.token   = token
+        
+        if not (self.api_url and self.token):
+            raise Missing_Init_Arguments('Both, url and token are mandatory')
+        
+        self.version += '-{}'.format( self.VERSION )
+    
+    def has_archiving(self):
+        """Archiving isn't yet supported."""
+        return False
+    
+    def has_resuming(self):
+        """Resuming isn't yet supported."""
+        return False
+    
+    def fetch_items(self):
+        """Fetch items."""
+        if not ( self.api_url and self.token):
+            raise Uninitiated_TaigaClient
+        output = { 'summary':'dummy' }
+        tc = TaigaMinClient( url=self.api_url , token=self.token )
+        output.update( tc.proj( self.origin ) )
+        return output
 
 
 class TaigaMinClient(): #HttpClient):
