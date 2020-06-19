@@ -50,6 +50,56 @@ from perceval.backends.core.taiga import *
 CFG_FILE = 'test_taiga.cfg'
 
 
+class TestTaigaBackend(unittest.TestCase):
+    """
+    """
+    TST_URL = 'https://a.taiga.instance/API/V9/'
+    TST_TKN = 'a_valid_token'
+    TST_DBE = Taiga( '01' , url=TST_URL , token=TST_TKN )
+   
+   
+    @classmethod
+    def setUpClass(self):
+        print( 'Testing Taiga v{}'.format( self.TST_DBE.version ) )
+    
+   
+    def setUp(self):
+        print() # sloppy testing fix
+    
+    
+    def test_init_missing_arguments(self):
+        TST_ORIGIN = '01'
+        
+        with self.assertRaises( Exception , msg='Initiating a Taiga backend without a token should have raised an exception.' ):
+            bah = Taiga( TST_ORIGIN , url=self.TST_URL )
+        with self.assertRaises( Exception , msg='Initiating a Taiga backend without a url should have raised an exception.'   ):
+            bah = Taiga( TST_ORIGIN , token=self.TST_TKN )
+    
+    
+    def test_has_archiving(self):
+        self.assertFalse( self.TST_DBE.has_archiving() )
+    
+    
+    def test_has_resuming(self):
+        self.assertFalse( self.TST_DBE.has_resuming() )
+    
+    
+    @mock.activate
+    def test_fetch_items(self):
+        projects , expected = Utilities.mock_full_projects( self.TST_URL ) 
+        
+        rec = self.TST_DBE.fetch_items()
+
+        print( rec.keys() )
+        self.assertTrue( rec['summary'] )
+    
+    
+    def test_classified_fields(self):
+        # no exception raised:
+        self.assertEqual( 0 , len(self.TST_DBE.CLASSIFIED_FIELDS) )
+
+
+
 @unittest.skip('Tests against real server disabled by default to avoid annoying the real taiga service.')
 class TestTaigaClientAgainstRealServer(unittest.TestCase):
     """Integration testing.
@@ -754,53 +804,22 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
     def test_proj(self):
         '''Taiga Project data.'''
         
-        def mock_url( list_name , query , project , max_page ):
-            name  = 'pj{}_{}'.format(project , list_name )
-            url   = self.API_URL + query.format( project )
-            self.mock_pages( name , url , max_page )
-        
-        # test config:
-        #                     item ,  url                       , (P ,exp) , (P ,exp)
-        STEPS = ( (       'basics' , 'projects/{}'              , (1 , 76) , (1 , 76) )
-                , (        'stats' , 'projects/{}/stats'        , (1 , 11) , (1 , 11) )
-                , ( 'issues_stats' , 'projects/{}/issues_stats' , (1 , 10) , (1 , 10) )
-                , (        'epics' ,       'epics?project={}'   , (1 ,  1) , (1 ,  1) )
-                , (  'userstories' , 'userstories?project={}'   , (1 , 29) , (2 , 38) )
-                , (        'tasks' ,       'tasks?project={}'   , (3 , 81) , (1 ,  7) )
-                , (         'wiki' ,        'wiki?project={}'   , (1 ,  2) , (1 ,  0) )
-                )
-        TST_PROJECTS = ('01' , '02')
-        
+        projects , expected = Utilities.mock_full_projects( self.API_URL )
         pn = 0
-        for project in TST_PROJECTS:
-            pn += 1
-            
-            # given a test setup:
-            for s in STEPS:
-                item = s[0]
-                url  = s[1]
-                page = s[1+pn][0]
-
-                mock_url( item , url , project , page )
+        for project in projects:
+            pn+=1
             
             # when:
             data = self.TST_DTC.proj( project )
             
-            """
-            print( str(len(data)) + ' project data items.' )
-            for name in data.keys():
-                print( str(len(data[name])) + 'x ' + name )
-            print( str(len(str(data))) + ' bytes of size.' )
-            # print( str(data) )
-            """
-            
             # then checks:
-            for s in STEPS:
-                item     = s[0]
-                expected = s[1+pn][1]
-                item_size = len(data[item])
+            project_items = expected[ project ]
+            for name in project_items.keys():
+
+                expected_size  = project_items[ name ]
+                actual_size    = len(data[ name ])
                 
-                self.assertEqual( expected , item_size )
+                self.assertEqual( expected_size , actual_size )
 
 
 
@@ -896,7 +915,7 @@ class Utilities(unittest.TestCase):
 
     def read_test_config(config_file):
         '''Read Testing configuration'''
-        
+                                                        
         # read config file:
         config = configparser.RawConfigParser()
         config.read( config_file )
@@ -909,7 +928,7 @@ class Utilities(unittest.TestCase):
         
         # take credentials (2 options):
         tag = 'taiga-default-credentials'
-        
+                                                                                                                                                                                
         try:
             usr = config.get( tag , 'User'     )
             pwd = config.get( tag , 'Password' )
@@ -952,6 +971,48 @@ class Utilities(unittest.TestCase):
                              )
             #print( 'Mock set up for {}'.format(url) )
     
+    
+    def mock_full_projects( api_url ):
+        '''Mocks the full sequence for a list of projects.'''
+        def mock_url( list_name , query , project , max_page ):
+            name  = 'pj{}_{}'.format(project , list_name )
+            url   = api_url + query.format( project )
+            Utilities.mock_pages( name , url , max_page )
+        
+        # config:
+        #                     item ,  url                       , (P ,exp) , (P ,exp)
+        STEPS = ( (       'basics' , 'projects/{}'              , (1 , 76) , (1 , 76) )
+                , (        'stats' , 'projects/{}/stats'        , (1 , 11) , (1 , 11) )
+                , ( 'issues_stats' , 'projects/{}/issues_stats' , (1 , 10) , (1 , 10) )
+                , (        'epics' ,       'epics?project={}'   , (1 ,  1) , (1 ,  1) )
+                , (  'userstories' , 'userstories?project={}'   , (1 , 29) , (2 , 38) )
+                , (        'tasks' ,       'tasks?project={}'   , (3 , 81) , (1 ,  7) )
+                , (         'wiki' ,        'wiki?project={}'   , (1 ,  2) , (1 ,  0) )
+                )
+        PROJECTS = ('01' , '02')
+        
+        # setup
+        pn = 0
+        all_sizes = {}
+        for project in PROJECTS:
+            pn += 1
+            
+            sizes_project = {} 
+            for s in STEPS:
+                
+                item = s[0]
+                url  = s[1]
+                page = s[1+pn][0]
+                size = s[1+pn][1]
+                
+                mock_url( item , url , project , page )
+                sizes_project.update( { item:size } )
+            
+            all_sizes.update( { project: sizes_project } )
+        
+        
+        return PROJECTS , all_sizes 
+
     
     @unittest.skip('This utility runner is disabled by default')
     def test_capture(self):
