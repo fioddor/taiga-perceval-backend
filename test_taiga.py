@@ -26,9 +26,8 @@
 #     Igor Zubiaurre <fioddor@gmail.com>
 #
 # Pending:
-#   - Complete mocked tests:
-#     - proj cases
 #   - More TCs:
+#     - More mocked proj TCs.
 #     - Expired token => HTTP 301?
 #   - readfile shold be shared with gitlab (remove when integrating and ask for it to be moved).
 #----------------------------------------------------------------------------------------------------------------------
@@ -68,8 +67,10 @@ class TestTaigaBackend(unittest.TestCase):
     
     
     def test_init_missing_arguments(self):
-        TST_ORIGIN = '01'
+        TST_ORIGIN = '01'                                    # the origin for Taiga is a project's id (or slug)?
         
+        with self.assertRaises( Exception , msg='Initiating a Taiga backend without an origin should have raised an exception.' ):
+            bah = Taiga( url=self.TST_URL , token=self.TST_TKN )
         with self.assertRaises( Exception , msg='Initiating a Taiga backend without a token should have raised an exception.' ):
             bah = Taiga( TST_ORIGIN , url=self.TST_URL )
         with self.assertRaises( Exception , msg='Initiating a Taiga backend without a url should have raised an exception.'   ):
@@ -86,18 +87,75 @@ class TestTaigaBackend(unittest.TestCase):
     
     @mock.activate
     def test_fetch_items(self):
+        '''Fech_items response contains expected items.
+        
+        Items might be expected because they either are:
+        a) mandatory by Perceval's backend architecture,
+        b) or the regular output by our Taiga client.
+        '''
+        PERCEVAL_META   = ( 'summary' , 'tag' )
+        EXPECTED_FIELDS = Taiga.CATEGORIES + list(PERCEVAL_META)
+        self.assertEqual( 7 + 2 , len(EXPECTED_FIELDS) )
+        
         projects , expected = Utilities.mock_full_projects( self.TST_URL ) 
         
         rec = self.TST_DBE.fetch_items()
-
-        print( rec.keys() )
-        self.assertTrue( rec['summary'] )
+        
+        for name in EXPECTED_FIELDS:
+            self.assertTrue( rec[ name ] )
     
     
     def test_classified_fields(self):
-        # no exception raised:
+        '''no exception raised on accessing that member.'''
         self.assertEqual( 0 , len(self.TST_DBE.CLASSIFIED_FIELDS) )
+    
+    
+    @mock.activate
+    def test_tag(self):
+        '''Feched items will and can be tagged.'''
+        # test setup:
+        projects , expected = Utilities.mock_full_projects( self.TST_URL )
+        
+        # AC1: will be autotagged if no tag is passed:
+        rec = self.TST_DBE.fetch_items()
+        self.assertTrue( '01' , rec[ 'tag' ] )
+        # AC2: will bear the input tag:
+        TST_TAG = 'a tag'
+        tbe = Taiga( '01' , url=self.TST_URL , token=self.TST_TKN , tag=TST_TAG )
+        rec = tbe.fetch_items()
+        self.assertTrue( TST_TAG , rec[ 'tag' ] )
+    
+    
+    def test_has_categories(self):
+        self.assertEquals( 7 , len(Taiga.CATEGORIES) )
+    
+   
+    @mock.activate
+    def test_metadata_category(self):
+        '''Each item category is identified.'''
+        
+        # AC1: unknown items raise an exception:
+        with self.assertRaises( Exception ):
+            bah = self.TST_DBE.metadata_category( { 'unknown':'category' } )
+        
+        # AC2: items of all categories are identified.
+        projects , expected = Utilities.mock_full_projects( self.TST_URL )
+        project = '01'
+       
+        tc = TaigaMinClient( url=self.TST_URL , token=self.TST_TKN )
+        data = tc.proj( project )
+        
+        for m in Taiga.TAIGA_MAP:
+            name = m[ 0 ]
+            item = data[ name ]
+            if isinstance( item , list ):
+                item = item[0]
+            cat  = self.TST_DBE.metadata_category( item )
+        
+            self.assertEqual( name , cat )
 
+        # AC3: project items are identified:
+        self.assertEqual( 'all' , self.TST_DBE.metadata_category( data ) )
 
 
 @unittest.skip('Tests against real server disabled by default to avoid annoying the real taiga service.')
