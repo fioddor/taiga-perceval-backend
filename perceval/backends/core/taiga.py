@@ -16,7 +16,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #
-# Purpose: Minimal client in a library.
+# Purpose: Minimal backend and client in a library.
 # Usage..: Instantiate object from other python program.
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
 #
@@ -33,40 +33,7 @@ logger = logging.getLogger(__name__)
 from ...backend import Backend
 
 
-class Taiga(Backend):
-    '''Taiga backend for Perceval.
 
-    Blah, blah
-    '''
-    VERSION = '20200619A'
-    
-    def __init__(self, origin , url=None , token=None ):
-        super().__init__( origin )
-        
-        self.api_url = url
-        self.token   = token
-        
-        if not (self.api_url and self.token):
-            raise Missing_Init_Arguments('Both, url and token are mandatory')
-        
-        self.version += '-{}'.format( self.VERSION )
-    
-    def has_archiving(self):
-        """Archiving isn't yet supported."""
-        return False
-    
-    def has_resuming(self):
-        """Resuming isn't yet supported."""
-        return False
-    
-    def fetch_items(self):
-        """Fetch items."""
-        if not ( self.api_url and self.token):
-            raise Uninitiated_TaigaClient
-        output = { 'summary':'dummy' }
-        tc = TaigaMinClient( url=self.api_url , token=self.token )
-        output.update( tc.proj( self.origin ) )
-        return output
 
 
 class TaigaMinClient(): #HttpClient):
@@ -86,7 +53,7 @@ class TaigaMinClient(): #HttpClient):
              - In our reference Taiga instance (taiga.io) project export needs special permissions we don't have.
     '''
     
-    VERSION = '20200619A' 
+    VERSION = '20200621A' 
     ME = 'TaigaMinClient-{}'.format( VERSION )
     H_STANDARD_BASE = { 'Content-Type': 'application/json'
                       ,   'Connection': 'close'
@@ -94,7 +61,6 @@ class TaigaMinClient(): #HttpClient):
     
     token   = None
     headers = None
-    
     
     
     def censor(self, uncensored ):
@@ -301,7 +267,9 @@ class TaigaMinClient(): #HttpClient):
     def proj_stats(self, project):
         '''Retrieve some basic stats from the given project.'''
          
-        STATISTICS = ( 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' )
+        DATA = Taiga.TAIGA_MAP[ 1 ]
+        assert 'stats' == DATA[ 0 ] 
+        STATISTICS = DATA[ 2 ]
         api_command = 'projects/{}/stats'.format( project )
          
         return self.get_lst_data_from_api( api_command , STATISTICS )
@@ -310,9 +278,9 @@ class TaigaMinClient(): #HttpClient):
     def proj_issues_stats(self, project):
         '''Retrieve some basic issues_stats from the given project.'''
         
-        STATISTICS = ( 'total_issues' , 'opened_issues' , 'closed_issues'
-                     , 'issues_per_priority' , 'issues_per_severity' , 'issues_per_status'
-                     )
+        DATA = Taiga.TAIGA_MAP[ 2 ]
+        assert 'issues_stats' == DATA[ 0 ]
+        STATISTICS = DATA[ 2 ]
         api_command = 'projects/{}/issues_stats'.format( project )
         
         return self.get_lst_data_from_api( api_command , STATISTICS )
@@ -324,21 +292,99 @@ class TaigaMinClient(): #HttpClient):
         Since we're not allowed to export a project we request the data by parts.
         '''
         
-        BLOCKS = ( (       'basics' , 'projects/{}'              )
-                 , (        'stats' , 'projects/{}/stats'        )
-                 , ( 'issues_stats' , 'projects/{}/issues_stats' )
-                 , (        'epics' ,       'epics?project={}'   )
-                 , (  'userstories' , 'userstories?project={}'   )
-                 , (        'tasks' ,       'tasks?project={}'   )
-                 , (         'wiki' ,        'wiki?project={}'   )
-                 )
         project_info = {}
         
-        for name , url in BLOCKS:
+        for name , url , bah in Taiga.TAIGA_MAP:
             project_info[name] = self.rq( url.format( project ) )
         
         return project_info
 
+
+
+class Taiga(Backend):
+    '''Taiga backend for Perceval.
+
+    Blah, blah
+    '''
+    VERSION = '20200621A'
+    ME      = 'Taiga-{}'.format( VERSION )
+    
+    BASICS_ITEMS   = ( 'members' , 'videoconferences' )
+    PROJECTS_STATS = ( 'total_milestones' , 'total_points' , 'closed_points' , 'defined_points' , 'assigned_points' )
+    ISSUES_STATS   = ( 'total_issues' , 'opened_issues' , 'closed_issues'
+                     , 'issues_per_priority' , 'issues_per_severity' , 'issues_per_status'
+                     )
+    #                     category , query                      , exclusive_items (for metadata_category(item))
+    TAIGA_MAP = ( (       'basics' , 'projects/{}'              ,   BASICS_ITEMS )
+                , (        'stats' , 'projects/{}/stats'        , PROJECTS_STATS )
+                , ( 'issues_stats' , 'projects/{}/issues_stats' ,   ISSUES_STATS )
+                , (        'epics' ,       'epics?project={}'   , ('epics_order',)                     )
+                , (  'userstories' , 'userstories?project={}'   , ('backlog_order' , 'sprint_order' )  )
+                , (        'tasks' ,       'tasks?project={}'   , ('user_story' , 'milestone')         )
+                , (         'wiki' ,        'wiki?project={}'   , ('content',)                         )
+                )
+    CATEGORIES = [ cat for cat, q, ei in TAIGA_MAP ]
+    
+    
+    def __init__(self, origin , url=None , token=None , tag=None ):
+        super().__init__( origin )
+        
+        self.api_url = url
+        self.token   = token
+        if not (self.api_url and self.token):
+            raise Missing_Init_Arguments('Both, url and token are mandatory')
+        
+        self.tag = tag if tag else origin
+        
+        self.version += '-{}'.format( self.VERSION )
+    
+    @classmethod
+    def has_archiving(self):
+        """Archiving isn't yet supported."""
+        return False
+    
+    @classmethod
+    def has_resuming(self):
+        """Resuming isn't yet supported."""
+        return False
+    
+    def fetch_items(self):
+        """Fetch items."""
+        if not ( self.api_url and self.token):
+            raise Uninitiated_TaigaClient
+        output = { 'summary':'dummy' , 'tag':self.tag }
+        tc = TaigaMinClient( url=self.api_url , token=self.token )
+        output.update( tc.proj( self.origin ) )
+        return output
+    
+    
+    @staticmethod
+    def metadata_category( item ):
+        """Identifies the item's category."""
+        
+        CATEGORY_ALL = set(( 'basics' , 'stats' , 'issues_stats' , 'epics' , 'userstories' , 'tasks' , 'wiki' ))
+        me = Taiga.ME + 'metadata_category'
+
+        candidates = []
+        for m in Taiga.TAIGA_MAP:
+            category   = m[ 0 ]
+            exclusives = set(m[ 2 ])
+            
+            item_keys  = set(item.keys())
+            if exclusives.issubset( item_keys ):
+                candidates.append( category )
+       
+        logger.debug( '{}. Item keys:{}'.format( me , item_keys )             )
+        logger.debug( '{}. Possible categories:{}'.format( me , candidates ) )
+        
+        if 1 == len(candidates):
+            return candidates[0]
+        elif CATEGORY_ALL.issubset( item_keys ):
+            return 'all'
+        elif 1 < len(candidates):
+            raise Exception ( 'Semi-identified item. Could be: {}'.format(str( candidates )) )
+        else:
+            raise Exception ( 'Unidentified item category for {}'.format(str( item_keys )) )
 
 
 class Uninitiated_TaigaClient(Exception):
