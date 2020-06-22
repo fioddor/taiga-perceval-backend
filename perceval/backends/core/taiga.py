@@ -17,7 +17,7 @@
 #
 #
 # Purpose: Minimal backend and client in a library.
-# Usage..: Instantiate object from other python program.
+# Usage..: Call through GrimoireLab's Perceval.
 # Author.: Fioddor Superconcentrado <fioddor@gmail.com>
 #
 #----------------------------------------------------------------------------------------------------------------------
@@ -247,43 +247,47 @@ class TaigaMinClient(): #HttpClient):
         return output
      
      
-    def get_lst_data_from_api(self, query, key_list):
-        '''Cherry-picks a given list of items from an endpoint.
-         
-        :param: key_list: a list of the JSON keys of all items to retrieve.
-        :returns: a dictionary with all retrieved items. It raises Exceptions
-            if any item is missing. 
+    def get_lst_data_from_api(self, endpoint , project_id ):
+        '''Cherry-picks a preconfigured list of items from a given endpoint and project.
+        
+        :param: endpoint: the name of the endpoint as configured in Taiga.TAIGA_MAP.
+        :param: project_id: id of the given project. 
+        :returns: a dictionary with the retrieved project's data for each preconfigured
+                  item for that endpoint. It raises Exceptions if any item is missing. 
         '''
-        record = self.rq( query )
+        # read configuration for the given endpoint:
+        found = False
+        for config in Taiga.TAIGA_MAP:
+            if endpoint == config[ 0 ]:
+               query = config[ 1 ]
+               items = config[ 2 ]
+               found = True
+               break
+        
+        if not found:
+            raise Exception( '{} mising in TAIGA_MAP'.format( list_name ) )
+        
+        # retrieve data:
+        record = self.rq( query.format( project_id ) )
+        
+        # cherry pick the listed items:
         output = {}
-        for datum in key_list:
+        for datum in items:
             if datum in record:
                 output[ datum ] = record[ datum ]
             else:
-                raise Missing_Expected_Item( datum , query )
+                raise Canary_Exception
         return output
     
     
     def proj_stats(self, project):
         '''Retrieve some basic stats from the given project.'''
-         
-        DATA = Taiga.TAIGA_MAP[ 1 ]
-        assert 'stats' == DATA[ 0 ] 
-        STATISTICS = DATA[ 2 ]
-        api_command = 'projects/{}/stats'.format( project )
-         
-        return self.get_lst_data_from_api( api_command , STATISTICS )
+        return self.get_lst_data_from_api( 'stats' , project )
      
      
     def proj_issues_stats(self, project):
         '''Retrieve some basic issues_stats from the given project.'''
-        
-        DATA = Taiga.TAIGA_MAP[ 2 ]
-        assert 'issues_stats' == DATA[ 0 ]
-        STATISTICS = DATA[ 2 ]
-        api_command = 'projects/{}/issues_stats'.format( project )
-        
-        return self.get_lst_data_from_api( api_command , STATISTICS )
+        return self.get_lst_data_from_api( 'issues_stats' , project )
     
     
     def proj(self, project):
@@ -348,13 +352,20 @@ class Taiga(Backend):
         """Resuming isn't yet supported."""
         return False
     
-    def fetch_items(self):
+    
+    def fetch_items(self, category , **kwargs ):
         """Fetch items."""
+
         if not ( self.api_url and self.token):
             raise Uninitiated_TaigaClient
         output = { 'summary':'dummy' , 'tag':self.tag }
         tc = TaigaMinClient( url=self.api_url , token=self.token )
-        output.update( tc.proj( self.origin ) )
+       
+        if 'all' == category:
+            output.update( tc.proj( self.origin ) )
+        else:
+            raise NotImplementedError
+
         return output
     
     
@@ -374,7 +385,7 @@ class Taiga(Backend):
             if exclusives.issubset( item_keys ):
                 candidates.append( category )
        
-        logger.debug( '{}. Item keys:{}'.format( me , item_keys )             )
+        logger.debug( '{}. Item keys:{}'.format( me , item_keys )            )
         logger.debug( '{}. Possible categories:{}'.format( me , candidates ) )
         
         if 1 == len(candidates):
@@ -385,6 +396,7 @@ class Taiga(Backend):
             raise Exception ( 'Semi-identified item. Could be: {}'.format(str( candidates )) )
         else:
             raise Exception ( 'Unidentified item category for {}'.format(str( item_keys )) )
+
 
 
 class Uninitiated_TaigaClient(Exception):
@@ -421,10 +433,13 @@ class Unexpected_HTTPcode(Exception):
         super().__init__( ERR_MESSAGE )
 
 
-class Missing_Expected_Item(Exception):
-    '''An expected item is missing in a dataset.'''
-    def __init__(self, datum , query , details=None):
-        ERR_MESSAGE = 'Missing expected {} in {}'.format(datum , query)
+class Canary_Exception(Exception):
+    '''This exception should never happen.
+    
+    It's used as protection against broken flows.
+    '''
+    def __init__(self , details=None):
+        ERR_MESSAGE = 'Broken flow. This shoud never happen!'.format(datum , query)
         if details:
             ERR_MESSAGE += ' ' + details
         super().__init__( ERR_MESSAGE )
