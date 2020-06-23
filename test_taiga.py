@@ -89,20 +89,34 @@ class TestTaigaBackend(unittest.TestCase):
     def test_fetch_items(self):
         '''Fech_items response contains expected items.
         
-        Items might be expected because they either are:
-        a) mandatory by Perceval's backend architecture,
-        b) or the regular output by our Taiga client.
         '''
-        PERCEVAL_META   = ( 'summary' , 'tag' )
-        EXPECTED_FIELDS = Taiga.CATEGORIES + list(PERCEVAL_META)
-        self.assertEqual( 7 + 2 , len(EXPECTED_FIELDS) )
         
+        # setup test:
         projects , expected = Utilities.mock_full_projects( self.TST_URL ) 
         
-        rec = self.TST_DBE.fetch_items()
+        # AC1: Unimplemented categories raise the expected exception:
+        with self.assertRaises( NotImplementedError ):
+            for item in self.TST_DBE.fetch_items( 'unimplemented_category' ):
+                break
         
-        for name in EXPECTED_FIELDS:
-            self.assertTrue( rec[ name ] )
+        # AC2: All mapped categories are implemented and retrieve the expected items:
+
+        # this seems trivial, but it'll look different if not all are implemened:
+        IMPLEMENTED   = set(Taiga.CATEGORIES)
+        UNIMPLEMENTED = set(Taiga.CATEGORIES) - IMPLEMENTED
+        self.assertEqual( 0 , len(UNIMPLEMENTED) )
+        
+        # each category that makes it through this block is implemented:
+        cnt_tested = 0
+        for category in IMPLEMENTED:
+            for item in self.TST_DBE.fetch_items( category ):
+                cnt_tested += 1
+                # the item's category is the expected one:
+                self.assertEqual( category , self.TST_DBE.metadata_category( item ) )
+                break
+        
+        # makes sure no empty iterable was returned:
+        self.assertEqual( len(IMPLEMENTED) , cnt_tested )
     
     
     def test_classified_fields(self):
@@ -113,18 +127,22 @@ class TestTaigaBackend(unittest.TestCase):
     @mock.activate
     def test_tag(self):
         '''Feched items will and can be tagged.'''
+        TST_CATEGORY = 'issues_stats'
+
         # test setup:
         projects , expected = Utilities.mock_full_projects( self.TST_URL )
         
         # AC1: will be autotagged if no tag is passed:
-        rec = self.TST_DBE.fetch_items()
-        self.assertTrue( '01' , rec[ 'tag' ] )
-        # AC2: will bear the input tag:
+        for item in self.TST_DBE.fetch_items( TST_CATEGORY ):
+            self.assertTrue( '01' , item[ 'tag' ] )
+            break
+        
+        # AC: will bear the input tag:
         TST_TAG = 'a tag'
         tbe = Taiga( '01' , url=self.TST_URL , token=self.TST_TKN , tag=TST_TAG )
-        rec = tbe.fetch_items()
-        self.assertTrue( TST_TAG , rec[ 'tag' ] )
-    
+        for item in tbe.fetch_items( TST_CATEGORY ):
+            self.assertTrue( TST_TAG , item[ 'tag' ] )
+            break
     
     def test_has_categories(self):
         self.assertEquals( 7 , len(Taiga.CATEGORIES) )
@@ -136,26 +154,16 @@ class TestTaigaBackend(unittest.TestCase):
         
         # AC1: unknown items raise an exception:
         with self.assertRaises( Exception ):
-            bah = self.TST_DBE.metadata_category( { 'unknown':'category' } )
+            bah = self.TST_DBE.metadata_category( {'data':{ 'unknown':'category' }} )
         
         # AC2: items of all categories are identified.
         projects , expected = Utilities.mock_full_projects( self.TST_URL )
-        project = '01'
-       
-        tc = TaigaMinClient( url=self.TST_URL , token=self.TST_TKN )
-        data = tc.proj( project )
+        tbe = self.TST_DBE
         
-        for m in Taiga.TAIGA_MAP:
-            name = m[ 0 ]
-            item = data[ name ]
-            if isinstance( item , list ):
-                item = item[0]
-            cat  = self.TST_DBE.metadata_category( item )
-        
-            self.assertEqual( name , cat )
-
-        # AC3: project items are identified:
-        self.assertEqual( 'all' , self.TST_DBE.metadata_category( data ) )
+        for category in Taiga.CATEGORIES:
+            for item in tbe.fetch_items( category ):
+                self.assertEqual( category , tbe.metadata_category( item ) )
+                break
 
 
 @unittest.skip('Tests against real server disabled by default to avoid annoying the real taiga service.')
@@ -515,7 +523,8 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         with self.assertRaises( Uninitiated_TaigaClient ):
             bah = tc.proj(             DUMMY_URL)
         with self.assertRaises( Uninitiated_TaigaClient ):
-            bah = tc.get_lst_data_from_api( DUMMY_URL , [] )
+            TST_VALID_LIST = 'stats'
+            bah = tc.get_lst_data_from_api( TST_VALID_LIST , 'a_project' )
         
         # right after login, token is set:
         tc.login()
@@ -631,7 +640,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj( 'id' )
         with self.assertRaises( HTTP_UNEXPECTED ):
-            bah = tc.get_lst_data_from_api( 'projects/id/stats', [] )
+            bah = tc.get_lst_data_from_api( 'stats' , 'id'  )
     
     
     @mock.activate
@@ -669,7 +678,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
         with self.assertRaises( HTTP_UNEXPECTED ):
             bah = tc.proj( 'id' )
         with self.assertRaises( HTTP_UNEXPECTED ):
-            bah = tc.get_lst_data_from_api( 'projects/id/stats', [] )
+            bah = tc.get_lst_data_from_api( 'stats' , 'id' )
     
     
     @mock.activate
@@ -832,7 +841,7 @@ class TestTaigaClientAgainstMockServer(unittest.TestCase):
                              ,              body=           read_file('data/taiga/{}.P{}.body.RS'.format(list_name , page))
                              ,   forcing_headers=json.loads(read_file('data/taiga/{}.P{}.head.RS'.format(list_name , page)).replace( "'" , '"' ))
                              )
-        TST_URL     = '{}?project={}'.format( TST_LIST , TST_PROJECT )
+        TST_URL = '{}?project={}'.format( TST_LIST , TST_PROJECT )
         # order is important for httpretty mock?:
         mock_list( self.API_URL + TST_URL             , TST_LIST , 1 )
         mock_list( self.API_URL + TST_URL + '&page=2' , TST_LIST , 2 )
