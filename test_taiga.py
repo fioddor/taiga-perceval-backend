@@ -59,14 +59,17 @@ class TestTaigaBackend(unittest.TestCase):
    
     @classmethod
     def setUpClass(self):
+        '''Shows data for testing administration.'''
         print( 'Testing Taiga v{}'.format( self.TST_DBE.version ) )
     
-   
+    
     def setUp(self):
+        '''Sloppy fix.'''
         print() # sloppy testing fix
     
     
     def test_init_missing_arguments(self):
+        '''Calling init with missing expected arguments is wrong and raises exeptions.'''
         TST_ORIGIN = '01'                                    # the origin for Taiga is a project's id (or slug)?
         
         with self.assertRaises( Exception , msg='Initiating a Taiga backend without an origin should have raised an exception.' ):
@@ -78,10 +81,12 @@ class TestTaigaBackend(unittest.TestCase):
     
     
     def test_has_archiving(self):
+        '''False, for the moment.'''
         self.assertFalse( self.TST_DBE.has_archiving() )
     
     
     def test_has_resuming(self):
+        '''False, for the moment.'''
         self.assertFalse( self.TST_DBE.has_resuming() )
     
     
@@ -100,7 +105,7 @@ class TestTaigaBackend(unittest.TestCase):
                 break
         
         # AC2: All mapped categories are implemented and retrieve the expected items:
-
+        
         # this seems trivial, but it'll look different if not all are implemened:
         IMPLEMENTED   = set(Taiga.CATEGORIES)
         UNIMPLEMENTED = set(Taiga.CATEGORIES) - IMPLEMENTED
@@ -120,7 +125,7 @@ class TestTaigaBackend(unittest.TestCase):
     
     
     def test_classified_fields(self):
-        '''no exception raised on accessing that member.'''
+        '''No exception raised on accessing that member.'''
         self.assertEqual( 0 , len(self.TST_DBE.CLASSIFIED_FIELDS) )
     
     
@@ -128,26 +133,28 @@ class TestTaigaBackend(unittest.TestCase):
     def test_tag(self):
         '''Feched items will and can be tagged.'''
         TST_CATEGORY = 'issues_stats'
-
+        
         # test setup:
         projects , expected = Utilities.mock_full_projects( self.TST_URL )
         
         # AC1: will be autotagged if no tag is passed:
-        for item in self.TST_DBE.fetch_items( TST_CATEGORY ):
+        for item in self.TST_DBE.fetch( TST_CATEGORY ):
             self.assertTrue( '01' , item[ 'tag' ] )
             break
         
         # AC: will bear the input tag:
         TST_TAG = 'a tag'
         tbe = Taiga( '01' , url=self.TST_URL , token=self.TST_TKN , tag=TST_TAG )
-        for item in tbe.fetch_items( TST_CATEGORY ):
+        for item in tbe.fetch( TST_CATEGORY ):
             self.assertTrue( TST_TAG , item[ 'tag' ] )
             break
     
-    def test_has_categories(self):
+    
+    def test_categories(self):
+        '''No exception raised when accessing that member.'''
         self.assertEquals( 7 , len(Taiga.CATEGORIES) )
     
-   
+    
     @mock.activate
     def test_metadata_category(self):
         '''Each item category is identified.'''
@@ -164,6 +171,7 @@ class TestTaigaBackend(unittest.TestCase):
             for item in tbe.fetch_items( category ):
                 self.assertEqual( category , tbe.metadata_category( item ) )
                 break
+
 
 
 @unittest.skip('Tests against real server disabled by default to avoid annoying the real taiga service.')
