@@ -298,8 +298,8 @@ class TaigaMinClient(): #HttpClient):
         
         project_info = {}
         
-        for name , url , bah in Taiga.TAIGA_MAP:
-            project_info[name] = self.rq( url.format( project ) )
+        for category , query , bah in Taiga.TAIGA_MAP:
+            project_info[ category ] = self.rq( query.format( project ) )
         
         return project_info
 
@@ -331,15 +331,13 @@ class Taiga(Backend):
     
     
     def __init__(self, origin , url=None , token=None , tag=None ):
-        super().__init__( origin )
+        super().__init__( origin , tag=tag )
         
         self.api_url = url
         self.token   = token
         if not (self.api_url and self.token):
             raise Missing_Init_Arguments('Both, url and token are mandatory')
-        
-        self.tag = tag if tag else origin
-        
+       
         self.version += '-{}'.format( self.VERSION )
     
     @classmethod
@@ -355,43 +353,61 @@ class Taiga(Backend):
     
     def fetch_items(self, category , **kwargs ):
         """Fetch items."""
-
+       
+        IMPLEMENTED = self.CATEGORIES
+        
+        # check preconditions:
+        if not ( category in IMPLEMENTED):
+            raise NotImplementedError
         if not ( self.api_url and self.token):
             raise Uninitiated_TaigaClient
+        
+        # preparations:
         output = { 'summary':'dummy' , 'tag':self.tag }
+        
+        for data in self.TAIGA_MAP:
+            name = data[ 0 ]
+            if name == category.lower().strip():
+                query = data[ 1 ]
+                break
+        
+        # retrieve data:
         tc = TaigaMinClient( url=self.api_url , token=self.token )
-       
-        if 'all' == category:
-            output.update( tc.proj( self.origin ) )
+        items = tc.rq( query.format( self.origin ) ) 
+        
+        # hold data:
+        if isinstance( items , list ):
+            for item in items:
+                output.update({ 'data':item })
+                yield output
+        elif isinstance( items , dict ):
+            output.update({ 'data':items })
+            yield output
         else:
-            raise NotImplementedError
+            print(type(items))
+            raise Canary_Exception(details='{} is no list nor a dict.'.format( type(items) ))
 
-        return output
-    
     
     @staticmethod
     def metadata_category( item ):
         """Identifies the item's category."""
         
-        CATEGORY_ALL = set(( 'basics' , 'stats' , 'issues_stats' , 'epics' , 'userstories' , 'tasks' , 'wiki' ))
         me = Taiga.ME + 'metadata_category'
-
+        
         candidates = []
         for m in Taiga.TAIGA_MAP:
             category   = m[ 0 ]
             exclusives = set(m[ 2 ])
-            
-            item_keys  = set(item.keys())
+             
+            item_keys  = set(item[ 'data' ].keys())
             if exclusives.issubset( item_keys ):
                 candidates.append( category )
-       
+        
         logger.debug( '{}. Item keys:{}'.format( me , item_keys )            )
         logger.debug( '{}. Possible categories:{}'.format( me , candidates ) )
         
         if 1 == len(candidates):
             return candidates[0]
-        elif CATEGORY_ALL.issubset( item_keys ):
-            return 'all'
         elif 1 < len(candidates):
             raise Exception ( 'Semi-identified item. Could be: {}'.format(str( candidates )) )
         else:
@@ -439,7 +455,7 @@ class Canary_Exception(Exception):
     It's used as protection against broken flows.
     '''
     def __init__(self , details=None):
-        ERR_MESSAGE = 'Broken flow. This shoud never happen!'.format(datum , query)
+        ERR_MESSAGE = 'Broken flow. This shoud never happen!'
         if details:
             ERR_MESSAGE += ' ' + details
         super().__init__( ERR_MESSAGE )
