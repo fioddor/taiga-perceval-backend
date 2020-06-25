@@ -40,10 +40,6 @@ from ...backend import (Backend , BackendCommand , BackendCommandArgumentParser 
 
 
 
-print('Taiga invoked!')
-
-
-
 class TaigaMinClient(): #HttpClient):
     '''Minimalistic Taiga Client.
     
