@@ -49,14 +49,80 @@ from perceval.backends.core.taiga import *
 CFG_FILE = 'test_taiga.cfg'
 
 
+class TestTaigaCommand(unittest.TestCase):
+    """TaigaCommand unit tests"""
+    
+
+    def test_backend_class(self):
+        """It's backend is the expected one."""
+        self.assertIs(TaigaCommand.BACKEND , Taiga)
+    
+    
+    def test_setup_cmd_parser(self):
+        """The parser object is correctly initialized."""
+        
+        TST_URL = 'https://a.taiga.instance'
+        TST_TKN = 'a_token'
+        TST_ORI = 'a_project'
+
+        parser = TaigaCommand.setup_cmd_parser()
+        
+        # AC1:
+        self.assertIsInstance(parser , BackendCommandArgumentParser)
+        self.assertEqual(parser._backend , Taiga)
+        
+        # TC01: no tag:
+        args = [ '--url'       , TST_URL
+               , '--api-token' , TST_TKN
+               , TST_ORI
+               ]
+        
+        pa = parser.parse(*args)
+
+        self.assertEqual( TST_ORI , pa.origin    )
+        self.assertEqual( TST_URL , pa.url       )
+        self.assertEqual( TST_TKN , pa.api_token )
+        self.assertEqual( None    , pa.tag       )
+        
+        # TC02: tagged:
+        TST_TAG = 'a tag'
+        args = [ '--url'       , TST_URL
+               , '--api-token' , TST_TKN
+               , '--tag'       , TST_TAG
+               , TST_ORI
+               ]
+        
+        pa = parser.parse(*args)
+        
+        self.assertEqual( TST_ORI , pa.origin    )
+        self.assertEqual( TST_URL , pa.url       )
+        self.assertEqual( TST_TKN , pa.api_token )
+        self.assertEqual( TST_TAG , pa.tag       )
+
+
+
+
 class TestTaigaBackend(unittest.TestCase):
+    """Tests Backend for Taiga
+    
+    Pending: - Testing width:
+               - test CLASSIFIED_FIELDS mechanism.
+               - test Summary feature.
+               - test project access by slug (instead of by id).
+             - Testing depth:
+               - tighter tests on retrieved data.
+                 - expected type.
+                 - expected value? (less maintainable).
+               - make sure exceptions are raised by our own backend (or our own underlying client)
+                 but not by other underlying third-party libraries.
     """
-    """
+    
+    
     TST_URL = 'https://a.taiga.instance/API/V9/'
     TST_TKN = 'a_valid_token'
-    TST_DBE = Taiga( '01' , url=TST_URL , token=TST_TKN )
-   
-   
+    TST_DBE = Taiga( '01' , url=TST_URL , api_token=TST_TKN )
+    
+    
     @classmethod
     def setUpClass(self):
         '''Shows data for testing administration.'''
@@ -69,24 +135,27 @@ class TestTaigaBackend(unittest.TestCase):
     
     
     def test_init_missing_arguments(self):
-        '''Calling init with missing expected arguments is wrong and raises exeptions.'''
+        '''Calling init with missing expected arguments is wrong and raises exceptions.'''
         TST_ORIGIN = '01'                                    # the origin for Taiga is a project's id (or slug)?
         
-        with self.assertRaises( Exception , msg='Initiating a Taiga backend without an origin should have raised an exception.' ):
-            bah = Taiga( url=self.TST_URL , token=self.TST_TKN )
-        with self.assertRaises( Exception , msg='Initiating a Taiga backend without a token should have raised an exception.' ):
+        # technically required argument (by prototype syntax):
+        with self.assertRaises( TypeError , msg='Initiating a Taiga backend without an origin, python should have raised an exception.' ):
+            bah = Taiga( url=self.TST_URL , api_token=self.TST_TKN )
+        
+        # arguments semantically required by functional logic:
+        with self.assertRaises( UsageError , msg='Initiating a Taiga backend without a token, it should have raised an exception.' ):
             bah = Taiga( TST_ORIGIN , url=self.TST_URL )
-        with self.assertRaises( Exception , msg='Initiating a Taiga backend without a url should have raised an exception.'   ):
-            bah = Taiga( TST_ORIGIN , token=self.TST_TKN )
+        with self.assertRaises( UsageError , msg='Initiating a Taiga backend without a url, it should have raised an exception.'   ):
+            bah = Taiga( TST_ORIGIN , api_token=self.TST_TKN )
     
     
     def test_has_archiving(self):
-        '''False, for the moment.'''
+        '''Expect False, for the moment.'''
         self.assertFalse( self.TST_DBE.has_archiving() )
     
     
     def test_has_resuming(self):
-        '''False, for the moment.'''
+        '''Expect False, for the moment.'''
         self.assertFalse( self.TST_DBE.has_resuming() )
     
     
@@ -142,9 +211,9 @@ class TestTaigaBackend(unittest.TestCase):
             self.assertTrue( '01' , item[ 'tag' ] )
             break
         
-        # AC: will bear the input tag:
+        # AC2: will bear the input tag:
         TST_TAG = 'a tag'
-        tbe = Taiga( '01' , url=self.TST_URL , token=self.TST_TKN , tag=TST_TAG )
+        tbe = Taiga( '01' , url=self.TST_URL , api_token=self.TST_TKN , tag=TST_TAG )
         for item in tbe.fetch( TST_CATEGORY ):
             self.assertTrue( TST_TAG , item[ 'tag' ] )
             break
