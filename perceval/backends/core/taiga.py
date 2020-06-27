@@ -447,7 +447,7 @@ class Taiga(Backend):
             # inject them with default values first and then overlay the actual values on
             # top, so that defaults only remain in items for which Taiga doesn't provide the
             # actual ones:
-            completed = { 'id':self.origin , 'modified_date':str(datetime_utcnow()) }
+            completed = { 'id':int(self.origin) , 'modified_date':datetime_utcnow().isoformat(sep='T') }
             completed.update( items )
             yield completed
         else:
